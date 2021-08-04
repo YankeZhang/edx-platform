@@ -1003,3 +1003,10 @@ if settings.FEATURES.get('ENABLE_BULK_USER_RETIREMENT'):
     urlpatterns += [
         url(r'', include('lms.djangoapps.bulk_user_retirement.urls')),
     ]
+
+from lms.pacts.views import provider_state
+urlpatterns.append(url(
+    r'^pact/provider_states/$',
+    provider_state,
+    name='provider-state-view'
+))

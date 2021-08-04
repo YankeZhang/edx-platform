@@ -1,6 +1,6 @@
 {
     "consumer": {
-      "name": "RANDOM"
+      "name": "CONSUMER"
     },
     "provider": {
       "name": "LMS"
@@ -8,6 +8,7 @@
     "interactions": [
       {
         "description": "A test state",
+        "providerState": "A test state",
         "request": {
           "method": "get",
           "path": "/api/mfe_context",
@@ -21,7 +22,7 @@
           },
           "body": {
             "currentProvider": null,
-            "platformName": "Your Platform Name Here",
+            "platformName": "édX",
             "providers": [],
             "secondaryProviders": [],
             "finishAuthUrl": null,

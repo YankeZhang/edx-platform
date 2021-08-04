@@ -6,7 +6,6 @@ import os
 from paver.easy import task
 
 from pact import Verifier
-import pytest
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -16,7 +15,7 @@ logging.basicConfig(level=logging.INFO)
 #     "http://127.0.0.1/pacts/provider/UserService/consumer"
 #     "/User_ServiceClient/version"
 # )
-PACT_FILE = "temp.json"
+PACT_FILE = "sample-contract.json"
 # PACT_BROKER_URL = "http://localhost"
 # PACT_BROKER_USERNAME = "pactbroker"
 # PACT_BROKER_PASSWORD = "pactbroker"
@@ -27,15 +26,15 @@ PACT_URL = "http://{}:{}".format(PACT_MOCK_HOST, PACT_MOCK_PORT)
 PACT_DIR = os.path.dirname(os.path.realpath(__file__))
 
 
-@pytest.fixture
-def default_opts():
-    return {
-        # 'broker_username': PACT_BROKER_USERNAME,
-        # 'broker_password': PACT_BROKER_PASSWORD,
-        # 'broker_url': PACT_BROKER_URL,
-        'publish_version': '3',
-        'publish_verification_results': False
-    }
+# @pytest.fixture
+# def default_opts():
+#     return {
+#         # 'broker_username': PACT_BROKER_USERNAME,
+#         # 'broker_password': PACT_BROKER_PASSWORD,
+#         # 'broker_url': PACT_BROKER_URL,
+#         'publish_version': '3',
+#         'publish_verification_results': False
+#     }
 
 @task
 def verify_pact():
