@@ -91,6 +91,7 @@ def _get_custom_pacing_children(subsection, num_weeks):
     Return relative date items for the subsection and its children
     """
     items = [subsection]
+    has_non_ora_content = False
     section_date_items = []
     while items:
         next_item = items.pop()
@@ -98,7 +99,11 @@ def _get_custom_pacing_children(subsection, num_weeks):
         if next_item.category != 'openassessment':
             section_date_items.append((next_item.location, {'due': timedelta(weeks=num_weeks)}))
             items.extend(next_item.get_children())
-    return section_date_items
+            if next_item.category != 'sequential' and next_item.category !='vertical':
+                has_non_ora_content = True
+    if has_non_ora_content:
+        return section_date_items
+    return []
 
 
 def extract_dates_from_course(course):
