@@ -20,7 +20,7 @@ def provider_state(request):
     Provider state setup view needed by pact verifier.
     """
     state_setup_mapping = {
-        'A test state': test_state,
+        'No course ID Provided': test_state,
     }
     request_body = json.loads(request.body)
     state = request_body.get('state')

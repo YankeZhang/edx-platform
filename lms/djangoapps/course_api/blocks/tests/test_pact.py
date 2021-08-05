@@ -3,8 +3,8 @@
 import logging
 import os
 
-from pact import Verifier
 from django.test import LiveServerTestCase
+from pact import Verifier
 
 
 log = logging.getLogger(__name__)
@@ -15,7 +15,8 @@ logging.basicConfig(level=logging.INFO)
 #     "http://127.0.0.1/pacts/provider/UserService/consumer"
 #     "/User_ServiceClient/version"
 # )
-PACT_FILE = "sample-contract.json"
+
+
 # PACT_BROKER_URL = "http://localhost"
 # PACT_BROKER_USERNAME = "pactbroker"
 # PACT_BROKER_PASSWORD = "pactbroker"
@@ -23,7 +24,10 @@ PACT_FILE = "sample-contract.json"
 # PACT_MOCK_HOST = 'localhost'
 # PACT_MOCK_PORT = 18000
 # PACT_URL = "http://{}:{}".format(PACT_MOCK_HOST, PACT_MOCK_PORT)
-PACT_DIR = os.path.dirname(os.path.realpath(__file__))
+
+# PACT_DIR = os.path.dirname(os.path.realpath(__file__))
+PACT_DIR = os.path.dirname("lms/pacts/")
+PACT_FILE = "fake-contract.json"
 
 
 # @pytest.fixture
@@ -36,14 +40,14 @@ PACT_DIR = os.path.dirname(os.path.realpath(__file__))
 #         'publish_verification_results': False
 #     }
 
-
 class MyLiveServerTest(LiveServerTestCase):
-
+    """ Sample Live Server """
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.verifier = Verifier(provider='LMS',
-                    provider_base_url=cls.live_server_url)
+        cls.verifier = Verifier(provider='lms-course-blocks',
+                    provider_base_url=cls.live_server_url,
+                    )
 
 
     @classmethod
@@ -55,12 +59,10 @@ class MyLiveServerTest(LiveServerTestCase):
         print(self.live_server_url)
         print("=================================\n")
 
-
         output, logs = self.verifier.verify_pacts(
                     os.path.join(PACT_DIR, PACT_FILE),
                     provider_states_setup_url= f"{self.live_server_url}/pact/provider_states/",
                 )
 
-        assert (output == 0)
-
-
+        print(logs)
+        assert output == 0

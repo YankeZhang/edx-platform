@@ -1,0 +1,31 @@
+{
+    "consumer": {
+      "name": "frontend-app-learning"
+    },
+    "provider": {
+      "name": "lms-course-blocks"
+    },
+    "interactions": [
+      {
+        "description": "a request to get course blocks wihtout course_id",
+        "providerState": "No course ID Provided",
+        "request": {
+          "method": "GET",
+          "path": "/api/courses/v2/blocks/"
+        },
+        "response": {
+          "status": 400,
+          "headers": {
+          },
+          "body": {
+              "developer_message": "course_id is required."
+          }        
+        }
+      }
+    ],
+    "metadata": {
+      "pactSpecification": {
+        "version": "2.0.0"
+      }
+    }
+  }
