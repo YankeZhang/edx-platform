@@ -256,7 +256,7 @@ CORS_ALLOW_HEADERS = corsheaders_default_headers + (
     'use-jwt-cookie',
 )
 
-LOGIN_REDIRECT_WHITELIST.extend([
+LOGIN_REDIRECT_WHITELIST = [
     CMS_BASE,
     # Allow redirection to all micro-frontends.
     # Please add your MFE if is not already listed here.
@@ -272,7 +272,7 @@ LOGIN_REDIRECT_WHITELIST.extend([
     'localhost:18400',  # frontend-app-publisher
     ENTERPRISE_LEARNER_PORTAL_NETLOC,  # frontend-app-learner-portal-enterprise
     ENTERPRISE_ADMIN_PORTAL_NETLOC,  # frontend-app-admin-portal
-])
+]
 
 ###################### JWTs ######################
 JWT_AUTH.update({
@@ -432,6 +432,3 @@ FEATURES['ENABLE_PREREQUISITE_COURSES'] = True
 # Used in edx-proctoring for ID generation in lieu of SECRET_KEY - dummy value
 # (ref MST-637)
 PROCTORING_USER_OBFUSCATION_KEY = '85920908f28904ed733fe576320db18cabd7b6cd'
-
-#################### Webpack Configuration Settings ##############################
-WEBPACK_LOADER['DEFAULT']['TIMEOUT'] = 5

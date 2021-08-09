@@ -22,7 +22,6 @@ from openedx.core.lib.license import LicenseMixin
 from openedx.core.lib.teams_config import TeamsConfig  # lint-amnesty, pylint: disable=unused-import
 from xmodule import course_metadata_utils
 from xmodule.course_metadata_utils import DEFAULT_GRADING_POLICY, DEFAULT_START_DATE
-from xmodule.data import CertificatesDisplayBehaviors
 from xmodule.graders import grader_from_conf
 from xmodule.seq_module import SequenceBlock
 from xmodule.tabs import CourseTabList, InvalidTabsException
@@ -556,11 +555,15 @@ class CourseFields:  # lint-amnesty, pylint: disable=missing-class-docstring
     certificates_display_behavior = String(
         display_name=_("Certificates Display Behavior"),
         help=_(
-            "This field, together with certificate_available_date will determine when a "
-            "user can see their certificate for the course"
+            "Enter end, early_with_info, or early_no_info. After certificate generation, students who passed see a "
+            "link to their certificates on the dashboard and students who did not pass see information about the "
+            "grading configuration. The default is end, which displays this certificate information to all students "
+            "after the course end date. To display this certificate information to all students as soon as "
+            "certificates are generated, enter early_with_info. To display only the links to passing students as "
+            "soon as certificates are generated, enter early_no_info."
         ),
         scope=Scope.settings,
-        default=CertificatesDisplayBehaviors.END,
+        default="end"
     )
     course_image = String(
         display_name=_("Course About Page Image"),
@@ -1056,10 +1059,9 @@ class CourseBlock(
             if not getattr(self, "tabs", []):
                 CourseTabList.initialize_default(self)
         except InvalidTabsException as err:
-            raise type(err)(f'{str(err)} For course: {str(self.id)}')  # lint-amnesty, pylint: disable=line-too-long
+            raise type(err)('{msg} For course: {course_id}'.format(msg=str(err), course_id=str(self.id)))  # lint-amnesty, pylint: disable=line-too-long
 
-        if not settings.FEATURES.get("ENABLE_V2_CERT_DISPLAY_SETTINGS"):
-            self.set_default_certificate_available_date()
+        self.set_default_certificate_available_date()
 
     def set_grading_policy(self, course_policy):
         """
@@ -1194,6 +1196,18 @@ class CourseBlock(
         Returns False if there is no end date specified.
         """
         return course_metadata_utils.has_course_ended(self.end)
+
+    def may_certify(self):
+        """
+        Return whether it is acceptable to show the student a certificate download link.
+        """
+        return course_metadata_utils.may_certify_for_course(
+            self.certificates_display_behavior,
+            self.certificates_show_before_end,
+            self.has_ended(),
+            self.certificate_available_date,
+            self.self_paced
+        )
 
     def has_started(self):
         return course_metadata_utils.has_course_started(self.start)

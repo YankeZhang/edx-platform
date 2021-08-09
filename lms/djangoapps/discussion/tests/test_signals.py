@@ -1,7 +1,7 @@
 """
 Tests the forum notification signals.
 """
-from unittest import mock
+import mock
 from django.test import TestCase
 from edx_django_utils.cache import RequestCache
 

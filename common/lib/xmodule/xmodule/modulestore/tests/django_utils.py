@@ -16,12 +16,12 @@ from django.db import connections
 from django.test import TestCase
 from django.test.utils import override_settings
 
+from lms.djangoapps.courseware.tests.factories import StaffFactory
 from lms.djangoapps.courseware.field_overrides import OverrideFieldData
 from openedx.core.djangolib.testing.utils import CacheIsolationMixin, CacheIsolationTestCase, FilteredQueryCountMixin
 from openedx.core.lib.tempdir import mkdtemp_clean
 from common.djangoapps.student.models import CourseEnrollment
 from common.djangoapps.student.tests.factories import AdminFactory, UserFactory
-from common.djangoapps.student.tests.factories import StaffFactory
 from xmodule.contentstore.django import _CONTENTSTORE
 from xmodule.modulestore import ModuleStoreEnum
 from xmodule.modulestore.django import SignalHandler, clear_existing_modulestores, modulestore
@@ -46,7 +46,7 @@ class StoreConstructors:
     draft, split = list(range(2))
 
 
-def mixed_store_config(data_dir, mappings, store_order=None, modulestore_options=None):
+def mixed_store_config(data_dir, mappings, store_order=None):
     """
     Return a `MixedModuleStore` configuration, which provides
     access to both Mongo-backed courses.
@@ -71,17 +71,9 @@ def mixed_store_config(data_dir, mappings, store_order=None, modulestore_options
     if store_order is None:
         store_order = [StoreConstructors.draft, StoreConstructors.split]
 
-    options = {
-        'default_class': 'xmodule.hidden_module.HiddenDescriptor',
-        'fs_root': data_dir,
-        'render_template': 'common.djangoapps.edxmako.shortcuts.render_to_string',
-    }
-    if modulestore_options:
-        options.update(modulestore_options)
-
     store_constructors = {
-        StoreConstructors.split: split_mongo_store_config(options)['default'],
-        StoreConstructors.draft: draft_mongo_store_config(options)['default'],
+        StoreConstructors.split: split_mongo_store_config(data_dir)['default'],
+        StoreConstructors.draft: draft_mongo_store_config(data_dir)['default'],
     }
 
     store = {
@@ -96,10 +88,17 @@ def mixed_store_config(data_dir, mappings, store_order=None, modulestore_options
     return store
 
 
-def draft_mongo_store_config(modulestore_options):
+def draft_mongo_store_config(data_dir):
     """
     Defines default module store using DraftMongoModuleStore.
     """
+
+    modulestore_options = {
+        'default_class': 'xmodule.hidden_module.HiddenDescriptor',
+        'fs_root': data_dir,
+        'render_template': 'common.djangoapps.edxmako.shortcuts.render_to_string'
+    }
+
     store = {
         'default': {
             'NAME': 'draft',
@@ -117,10 +116,16 @@ def draft_mongo_store_config(modulestore_options):
     return store
 
 
-def split_mongo_store_config(modulestore_options):
+def split_mongo_store_config(data_dir):
     """
     Defines split module store.
     """
+    modulestore_options = {
+        'default_class': 'xmodule.hidden_module.HiddenDescriptor',
+        'fs_root': data_dir,
+        'render_template': 'common.djangoapps.edxmako.shortcuts.render_to_string',
+    }
+
     store = {
         'default': {
             'NAME': 'draft',
@@ -200,16 +205,6 @@ TEST_DATA_SPLIT_MODULESTORE = functools.partial(
     mkdtemp_clean(),
     {},
     store_order=[StoreConstructors.split, StoreConstructors.draft]
-)
-
-# Tests that use mixed modulestore and split, but don't load/use draft modulestore.
-# This also enables "draft preferred" mode, like Studio.
-TEST_DATA_ONLY_SPLIT_MODULESTORE_DRAFT_PREFERRED = functools.partial(
-    mixed_store_config,
-    mkdtemp_clean(),
-    {},
-    store_order=[StoreConstructors.split],
-    modulestore_options={'branch_setting_func': lambda: ModuleStoreEnum.Branch.draft_preferred},
 )
 
 
@@ -343,7 +338,6 @@ class ModuleStoreTestUsersMixin():
         Create a test user for a course.
         """
         if user_type is CourseUserType.ANONYMOUS:
-            self.client.logout()
             return AnonymousUser()
 
         is_enrolled = user_type is CourseUserType.ENROLLED

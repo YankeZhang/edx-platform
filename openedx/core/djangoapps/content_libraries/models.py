@@ -83,7 +83,7 @@ class ContentLibrary(models.Model):
         return LibraryLocatorV2(org=self.org.short_name, slug=self.slug)
 
     def __str__(self):
-        return f"ContentLibrary ({str(self.library_key)})"
+        return "ContentLibrary ({})".format(str(self.library_key))
 
 
 class ContentLibraryPermission(models.Model):

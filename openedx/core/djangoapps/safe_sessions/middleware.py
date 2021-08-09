@@ -3,29 +3,22 @@ This module defines SafeSessionMiddleware that makes use of a
 SafeCookieData that cryptographically binds the user to the session id
 in the cookie.
 
-The implementation is inspired in part by the proposal in the paper
-<http://www.cse.msu.edu/~alexliu/publications/Cookie/cookie.pdf>
-but deviates in a number of ways; mostly it just uses the technique
-of an intermediate key for HMAC.
+The implementation is inspired by the proposal in the following paper:
+http://www.cse.msu.edu/~alexliu/publications/Cookie/cookie.pdf
 
 Note: The proposed protocol protects against replay attacks by
-use of channel binding—specifically, by
 incorporating the session key used in the SSL connection.  However,
 this does not suit our needs since we want the ability to reuse the
-same cookie over multiple browser sessions, and in any case the server
-will be behind a load balancer and won't have access to the correct
-SSL session information.  So instead, we mitigate
+same cookie over multiple SSL connections.  So instead, we mitigate
 replay attacks by enforcing session cookie expiration
 (via TimestampSigner) and assuming SESSION_COOKIE_SECURE (see below).
 
 We use django's built-in Signer class, which makes use of a built-in
-salted_hmac function that derives an intermediate key from the
+salted_hmac function that derives a usage-specific key from the
 server's SECRET_KEY, as proposed in the paper.
 
-Note: The paper proposes deriving an intermediate key from the
+Note: The paper proposes deriving a usage-specific key from the
 session's expiration time in order to protect against volume attacks.
-(Note that these hypothetical attacks would only succeed if HMAC-SHA1
-were found to be weak, and there is presently no indication of this.)
 However, since django does not always use an expiration time, we
 instead use a random key salt to prevent volume attacks.
 
@@ -37,25 +30,28 @@ of the session cookies.  Django instead relies on the browser to honor
 session cookie expiration.
 
 The resulting safe cookie data that gets stored as the value in the
-session cookie is:
+session cookie is a tuple of:
+    (
+        version,
+        session_id,
+        key_salt,
+        signature
+    )
 
-    version '|' session_id '|' key_salt '|' signed_hash
+    where signature is:
+        signed_data : base64(HMAC_SHA1(signed_data, usage_key))
 
-where signed_hash is a structure incorporating the following value and
-a MAC (via TimestampSigner):
+    where signed_data is:
+        H(version | session_id | user_id) : timestamp
 
-    SHA256(version '|' session_id '|' user_id '|')
-
-TimestampSigner uses HMAC-SHA1 to derive a key from key_salt and the
-server's SECRET_KEY; see django.core.signing for more details on the
-structure of the output (which takes the form of colon-delimited
-Base64.)
+    where usage_key is:
+        SHA1(key_salt + 'signer' + settings.SECRET_KEY)
 
 Note: We assume that the SESSION_COOKIE_SECURE setting is set to
 TRUE to prevent inadvertent leakage of the session cookie to a
 person-in-the-middle.  The SESSION_COOKIE_SECURE flag indicates
 to the browser that the cookie should be sent only over an
-SSL-protected channel.  Otherwise, a connection eavesdropper could copy
+SSL-protected channel.  Otherwise, a session hijacker could copy
 the entire cookie and use it to impersonate the victim.
 
 Custom Attributes:
@@ -78,7 +74,7 @@ from django.core import signing
 from django.http import HttpResponse
 from django.utils.crypto import get_random_string
 from django.utils.deprecation import MiddlewareMixin
-
+from django.utils.encoding import python_2_unicode_compatible
 from edx_django_utils.monitoring import set_custom_attribute
 
 from openedx.core.lib.mobile_utils import is_request_from_mobile_app
@@ -106,6 +102,7 @@ class SafeCookieError(Exception):
         log.error(error_message)
 
 
+@python_2_unicode_compatible
 class SafeCookieData:
     """
     Cookie data that cryptographically binds and timestamps the user
@@ -124,7 +121,7 @@ class SafeCookieData:
             session_id (string): Unique and unguessable session
                 identifier to which this safe cookie data is bound.
             key_salt (string): A securely generated random string that
-                is used to derive an intermediate secret key for
+                is used to derive a usage-specific secret key for
                 signing the safe cookie data to protect against volume
                 attacks.
             signature (string): Cryptographically created signature
@@ -188,10 +185,9 @@ class SafeCookieData:
 
     def sign(self, user_id):
         """
-        Signs the safe cookie data for this user using a timestamped signature
-        and an intermediate key derived from key_salt and server's SECRET_KEY.
-        Value under signature is the hexadecimal string from
-        SHA256(version '|' session_id '|' user_id '|').
+        Computes the signature of this safe cookie data.
+        A signed value of hash(version | session_id | user_id):timestamp
+        with a usage-specific key derived from key_salt.
         """
         data_to_sign = self._compute_digest(user_id)
         self.signature = signing.dumps(data_to_sign, salt=self.key_salt)
@@ -218,7 +214,7 @@ class SafeCookieData:
 
     def _compute_digest(self, user_id):
         """
-        Returns SHA256(version '|' session_id '|' user_id '|') hex string.
+        Returns hash(version | session_id | user_id |)
         """
         hash_func = sha256()
         for data_item in [self.version, self.session_id, user_id]:
@@ -394,8 +390,8 @@ class SafeSessionMiddleware(SessionMiddleware, MiddlewareMixin):
             if request.safe_cookie_verified_user_id != request.user.id and request.user.id is not None:
                 log.warning(
                     (
-                        "SafeCookieData user at request '{}' does not match user at response: '{}' "
-                        "for request path '{}'"
+                        "SafeCookieData user at request '{0}' does not match user at response: '{1}' "
+                        "for request path '{2}'"
                     ).format(  # pylint: disable=logging-format-interpolation
                         request.safe_cookie_verified_user_id, request.user.id, request.path,
                     ),
@@ -406,8 +402,8 @@ class SafeSessionMiddleware(SessionMiddleware, MiddlewareMixin):
             if request.safe_cookie_verified_user_id != userid_in_session and userid_in_session is not None:
                 log.warning(
                     (
-                        "SafeCookieData user at request '{}' does not match user in session: '{}' "
-                        "for request path '{}'"
+                        "SafeCookieData user at request '{0}' does not match user in session: '{1}' "
+                        "for request path '{2}'"
                     ).format(  # pylint: disable=logging-format-interpolation
                         request.safe_cookie_verified_user_id, userid_in_session, request.path,
                     ),

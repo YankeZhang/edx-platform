@@ -25,7 +25,6 @@ from common.djangoapps.course_modes.models import CourseMode
 from common.djangoapps.entitlements.api import get_active_entitlement_list_for_user
 from common.djangoapps.entitlements.models import CourseEntitlement
 from lms.djangoapps.certificates import api as certificate_api
-from lms.djangoapps.certificates.data import CertificateStatuses
 from lms.djangoapps.certificates.models import GeneratedCertificate
 from lms.djangoapps.commerce.utils import EcommerceService
 from openedx.core.djangoapps.catalog.api import get_programs_by_type
@@ -207,7 +206,7 @@ class ProgramProgressMeter:
         ]
 
         if runs_with_required_mode:
-            not_failed_runs = [run for run in runs_with_required_mode if run['key'] not in self.failed_course_runs]
+            not_failed_runs = [run for run in runs_with_required_mode if run not in self.failed_course_runs]
             if not_failed_runs:
                 return True
 
@@ -329,7 +328,7 @@ class ProgramProgressMeter:
                 modes_match = course_run_mode == certificate_mode
 
                 # Grab the available date and keep it if it's the earliest one for this catalog course.
-                if modes_match and CertificateStatuses.is_passing_status(certificate.status):
+                if modes_match and certificate_api.is_passing_status(certificate.status):
                     course_overview = CourseOverview.get_from_id(key)
                     available_date = available_date_for_certificate(course_overview, certificate)
                     earliest_course_run_date = min(
@@ -418,7 +417,7 @@ class ProgramProgressMeter:
         Determine which course runs have been failed by the user.
 
         Returns:
-            list of strings, each a course run ID
+            list of dicts, each a course run ID
         """
         return [run['course_run_id'] for run in self.course_runs_with_state['failed']]
 
@@ -427,9 +426,6 @@ class ProgramProgressMeter:
         """
         Determine which course runs have been completed and failed by the user.
 
-        A course run is considered completed for a user if they have a certificate in the correct state and
-        the certificate is available.
-
         Returns:
             dict with a list of completed and failed runs
         """
@@ -437,23 +433,12 @@ class ProgramProgressMeter:
 
         completed_runs, failed_runs = [], []
         for certificate in course_run_certificates:
-            course_key = certificate['course_key']
             course_data = {
-                'course_run_id': str(course_key),
+                'course_run_id': str(certificate['course_key']),
                 'type': self._certificate_mode_translation(certificate['type']),
             }
 
-            try:
-                course_overview = CourseOverview.get_from_id(course_key)
-            except CourseOverview.DoesNotExist:
-                may_certify = True
-            else:
-                may_certify = certificate_api.certificates_viewable_for_course(course_overview)
-
-            if (
-                CertificateStatuses.is_passing_status(certificate['status'])
-                and may_certify
-            ):
+            if certificate_api.is_passing_status(certificate['status']):
                 completed_runs.append(course_data)
             else:
                 failed_runs.append(course_data)
@@ -586,7 +571,7 @@ class ProgramDataExtender:
             run_mode['upgrade_url'] = None
 
     def _attach_course_run_may_certify(self, run_mode):
-        run_mode['may_certify'] = certificate_api.certificates_viewable_for_course(self.course_overview)
+        run_mode['may_certify'] = self.course_overview.may_certify()
 
     def _attach_course_run_is_mobile_only(self, run_mode):
         run_mode['is_mobile_only'] = self.mobile_only

@@ -34,7 +34,7 @@ import six
 # specific library imports
 from calc import UndefinedVariable, UnmatchedParenthesis, evaluator
 from django.utils import html
-
+from django.utils.encoding import python_2_unicode_compatible
 from lxml import etree
 from lxml.html.soupparser import fromstring as fromstring_bs  # uses Beautiful Soup!!! FIXME?
 from pyparsing import ParseException
@@ -110,6 +110,7 @@ class StudentInputError(Exception):
 # Main base class for CAPA responsetypes
 
 
+@python_2_unicode_compatible
 class LoncapaResponse(six.with_metaclass(abc.ABCMeta, object)):
     """
     Base class for CAPA responsetypes.  Each response type (ie a capa question,
@@ -986,7 +987,7 @@ class MultipleChoiceResponse(LoncapaResponse):
     whole software stack works with just the one system of naming.
     The .has_mask() test on a response checks for masking, implemented by a
     ._has_mask attribute on the response object.
-    The logging functionality in capa_module calls the unmask functions here
+    The logging functionality in capa_base calls the unmask functions here
     to translate back to choice_0 name style for recording in the logs, so
     the logging is in terms of the regular names.
     """
@@ -2776,7 +2777,7 @@ class CodeResponse(LoncapaResponse):
         # matches
         if oldcmap.is_right_queuekey(self.answer_id, queuekey):
             # Sanity check on returned points
-            if points < 0:  # lint-amnesty, pylint: disable=consider-using-max-builtin
+            if points < 0:
                 points = 0
             # Queuestate is consumed
             oldcmap.set(

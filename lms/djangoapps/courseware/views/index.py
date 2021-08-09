@@ -64,11 +64,7 @@ from ..masquerade import check_content_start_date_for_masquerade_user, setup_mas
 from ..model_data import FieldDataCache
 from ..module_render import get_module_for_descriptor, toc_for_course
 from ..permissions import MASQUERADE_AS_STUDENT
-from ..toggles import (
-    courseware_legacy_is_visible,
-    courseware_mfe_is_advertised,
-    is_verified_name_enabled_for_course
-)
+from ..toggles import courseware_legacy_is_visible, courseware_mfe_is_advertised
 from .views import CourseTabView
 
 log = logging.getLogger("edx.courseware.views.index")
@@ -182,6 +178,7 @@ class CoursewareIndex(View):
         if courseware_legacy_is_visible(
                 course_key=self.course_key,
                 is_global_staff=self.request.user.is_staff,
+                is_course_staff=self.is_staff,
         ):
             return
         # STAY: if we are in a special (ie proctored/timed) exam, which isn't yet
@@ -446,7 +443,6 @@ class CoursewareIndex(View):
             'sequence_title': None,
             'disable_accordion': not DISABLE_COURSE_OUTLINE_PAGE_FLAG.is_enabled(self.course.id),
             'show_search': show_search,
-            'is_verified_name_enabled': is_verified_name_enabled_for_course(self.course.id),
         }
         courseware_context.update(
             get_experiment_user_metadata_context(

@@ -115,11 +115,4 @@ def get_course_final_price(user, sku, course_price):
         user.username,
         price_details.get('total_incl_tax')
     )
-    result = price_details.get('total_incl_tax', course_price)
-
-    # When ecommerce price has zero cents, 'result' gets 149.0
-    # As per REV-2260: if zero cents, then only show dollars
-    if int(result) == result:
-        result = int(result)
-
-    return result
+    return price_details.get('total_incl_tax', course_price)

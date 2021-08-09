@@ -2584,10 +2584,6 @@ input[name="subject"] {
       font-size: em(13);
     }
   }
-
-  .special-exam-header {
-    padding-left: 25px;
-  }
 }
 
 .special-allowance-container,
@@ -2924,7 +2920,8 @@ input[name="subject"] {
     width: 400px;
   }
 
-  #certificate-allowlist-editor {
+
+  #certificate-white-list-editor {
     padding-top: 5px;
 
     .certificate-exception-inputs {
@@ -2938,7 +2935,7 @@ input[name="subject"] {
     }
   }
 
-  .allowlisted-students,
+  .white-listed-students,
   .invalidation-history {
     margin-top: 10px;
     padding-top: 5px;
@@ -3025,11 +3022,11 @@ input[name="subject"] {
     }
   }
 
-  .bulk-allowlist-exception {
+  .bulk-white-list-exception {
     margin-top: 10px;
     padding-top: 5px;
 
-    .allowlist-csv {
+    .white-list-csv {
       .bulk-exception-results {
         margin-top: 10px;
         background-color: $gray-l4;

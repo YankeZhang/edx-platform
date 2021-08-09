@@ -5,9 +5,9 @@ from io import BytesIO
 from unittest import mock
 
 import pytest
-import datetime  # lint-amnesty, pylint: disable=wrong-import-order
-import itertools  # lint-amnesty, pylint: disable=wrong-import-order
-import math  # lint-amnesty, pylint: disable=wrong-import-order
+import datetime
+import itertools
+import math
 import ddt
 import pytz
 from django.conf import settings
@@ -141,6 +141,7 @@ class CourseOverviewTestCase(CatalogIntegrationMixin, ModuleStoreTestCase, Cache
             ('clean_id', ('#',)),
             ('has_ended', ()),
             ('has_started', ()),
+            ('may_certify', ()),
         ]
         for method_name, method_args in methods_to_test:
             course_value = getattr(course, method_name)(*method_args)
@@ -601,11 +602,6 @@ class CourseOverviewImageSetTestCase(ModuleStoreTestCase):
         course_image_content = StaticContent(course_image_asset_key, image_name, 'image/png', image_buff)
         contentstore().save(course_image_content)
 
-    def get_from_id(self, course_id):
-        """Get course overview, but makes sure that we are actually calling the method by wiping cache"""
-        self.clear_caches()  # wipe out the request cache so that get_from_id is actually run each time
-        return CourseOverview.get_from_id(course_id)
-
     def set_config(self, enabled):
         """
         Enable or disable thumbnail generation config.
@@ -687,7 +683,7 @@ class CourseOverviewImageSetTestCase(ModuleStoreTestCase):
             course = CourseFactory.create(
                 default_store=modulestore_type, course_image=course_image
             )
-            course_overview_before = self.get_from_id(course.id)
+            course_overview_before = CourseOverview.get_from_id(course.id)
 
         # This initial seeding should create an entry for the image_set.
         assert hasattr(course_overview_before, 'image_set')
@@ -702,7 +698,7 @@ class CourseOverviewImageSetTestCase(ModuleStoreTestCase):
         self.set_config(False)
 
         # Fetch a new CourseOverview
-        course_overview_after = self.get_from_id(course.id)
+        course_overview_after = CourseOverview.get_from_id(course.id)
 
         # Assert that the data still exists for debugging purposes
         assert hasattr(course_overview_after, 'image_set')
@@ -722,7 +718,7 @@ class CourseOverviewImageSetTestCase(ModuleStoreTestCase):
         """
         with self.store.default_store(modulestore_type):
             course = CourseFactory.create(default_store=modulestore_type)
-            overview = self.get_from_id(course.id)
+            overview = CourseOverview.get_from_id(course.id)
 
             # First the behavior when there's no CDN enabled...
             AssetBaseUrlConfig.objects.all().delete()
@@ -748,7 +744,7 @@ class CourseOverviewImageSetTestCase(ModuleStoreTestCase):
         """
         with self.store.default_store(modulestore_type):
             course = CourseFactory.create(default_store=modulestore_type)
-            overview = self.get_from_id(course.id)
+            overview = CourseOverview.get_from_id(course.id)
 
             # Now enable the CDN...
             AssetBaseUrlConfig.objects.create(enabled=True, base_url='fakecdn.edx.org')
@@ -776,7 +772,7 @@ class CourseOverviewImageSetTestCase(ModuleStoreTestCase):
         """
         with self.store.default_store(modulestore_type):
             course = CourseFactory.create(default_store=modulestore_type)
-            overview = self.get_from_id(course.id)
+            overview = CourseOverview.get_from_id(course.id)
 
             # Now enable the CDN...
             AssetBaseUrlConfig.objects.create(enabled=True, base_url='fakecdn.edx.org')
@@ -823,7 +819,7 @@ class CourseOverviewImageSetTestCase(ModuleStoreTestCase):
         # The next time we create a CourseOverview, the images are explicitly
         # *not* regenerated.
         with mock.patch('openedx.core.lib.courses.create_course_image_thumbnail') as patched_create_thumbnail:
-            self.get_from_id(course_overview.id)
+            course_overview = CourseOverview.get_from_id(course_overview.id)
             patched_create_thumbnail.assert_not_called()
 
     @ddt.data(
@@ -867,7 +863,7 @@ class CourseOverviewImageSetTestCase(ModuleStoreTestCase):
                 self.set_config(enabled=False)
 
             # Now generate the CourseOverview...
-            course_overview = self.get_from_id(course.id)
+            course_overview = CourseOverview.get_from_id(course.id)
 
             # If create_after_overview is True, no image_set exists yet. Verify
             # that, then switch config back over to True and it should lazily
@@ -875,7 +871,7 @@ class CourseOverviewImageSetTestCase(ModuleStoreTestCase):
             if create_after_overview:
                 assert not hasattr(course_overview, 'image_set')
                 self.set_config(enabled=True)
-                course_overview = self.get_from_id(course.id)
+                course_overview = CourseOverview.get_from_id(course.id)
 
             assert hasattr(course_overview, 'image_set')
             image_urls = course_overview.image_urls
@@ -936,7 +932,7 @@ class CourseOverviewImageSetTestCase(ModuleStoreTestCase):
 
         # Now generate the CourseOverview...
         config = CourseOverviewImageConfig.current()
-        course_overview = self.get_from_id(course.id)
+        course_overview = CourseOverview.get_from_id(course.id)
         image_urls = course_overview.image_urls
 
         for image_url, target in [(image_urls['small'], config.small), (image_urls['large'], config.large)]:
@@ -977,7 +973,7 @@ class CourseOverviewImageSetTestCase(ModuleStoreTestCase):
         course = CourseFactory.create()
 
         # First create our CourseOverview
-        overview = self.get_from_id(course.id)
+        overview = CourseOverview.get_from_id(course.id)
         assert not hasattr(overview, 'image_set')
 
         # Now create an ImageSet by hand...
@@ -1017,7 +1013,7 @@ class CourseOverviewImageSetTestCase(ModuleStoreTestCase):
         self._create_course_image(course, course_image)
 
         # Create course overview with image set.
-        overview = self.get_from_id(course.id)
+        overview = CourseOverview.get_from_id(course.id)
         assert hasattr(overview, 'image_set')
 
         # Make sure the thumbnail names come out as expected...
@@ -1058,7 +1054,7 @@ class CourseOverviewImageSetTestCase(ModuleStoreTestCase):
             if expected_url is None:
                 expected_url = course_image_url(course)
 
-            course_overview = self.get_from_id(course.id)
+            course_overview = CourseOverview.get_from_id(course.id)
 
             # All the URLs that come back should be for the expected_url
             assert course_overview.image_urls == {'raw': expected_url, 'small': expected_url, 'large': expected_url}

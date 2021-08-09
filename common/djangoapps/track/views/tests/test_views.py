@@ -1,11 +1,10 @@
 # lint-amnesty, pylint: disable=missing-module-docstring
-
-from unittest.mock import patch, sentinel
-
 import ddt
+import six
 from django.contrib.auth.models import User  # lint-amnesty, pylint: disable=imported-auth-user
 from django.test.client import RequestFactory
 from django.test.utils import override_settings
+from mock import patch, sentinel
 
 from openedx.core.lib.tests.assertions.events import assert_event_matches
 from common.djangoapps.track import views
@@ -21,11 +20,11 @@ class TestTrackViews(EventTrackingTestCase):  # lint-amnesty, pylint: disable=mi
 
     @classmethod
     def setUpTestData(cls):
-        super().setUpTestData()
+        super(TestTrackViews, cls).setUpTestData()
         User.objects.create(pk=TEST_USER_ID, username=TEST_USERNAME)
 
     def setUp(self):
-        super().setUp()
+        super(TestTrackViews, self).setUp()  # lint-amnesty, pylint: disable=super-with-arguments
 
         self.request_factory = RequestFactory()
 
@@ -111,11 +110,11 @@ class TestTrackViews(EventTrackingTestCase):  # lint-amnesty, pylint: disable=mi
 
     @ddt.data(
         {
-            'event_data': f'{{"username": "{TEST_USERNAME}"}}',
+            'event_data': u'{{"username": "{}"}}'.format(TEST_USERNAME),
             'expected_event_data': {"username": TEST_USERNAME, "user_id": TEST_USER_ID}
         },
         {
-            'event_data': '{"username": "unknown-user"}',
+            'event_data': u'{"username": "unknown-user"}',
             'expected_event_data': {"username": "unknown-user"},
         }
     )
@@ -184,7 +183,7 @@ class TestTrackViews(EventTrackingTestCase):  # lint-amnesty, pylint: disable=mi
                     'course_id': 'foo/bar/baz',
                     'org_id': 'foo',
                     'user_id': user_id,
-                    'path': '/event'
+                    'path': u'/event'
                 },
             }
         finally:
@@ -238,7 +237,6 @@ class TestTrackViews(EventTrackingTestCase):  # lint-amnesty, pylint: disable=mi
                     'referer': '',
                     'client_id': None,
                     'course_id': 'foo/bar/baz',
-                    'enterprise_uuid': '',
                     'path': self.path_with_course,
                     'page': None
                 }
@@ -280,7 +278,6 @@ class TestTrackViews(EventTrackingTestCase):  # lint-amnesty, pylint: disable=mi
                     'referer': '',
                     'client_id': '1033501218.1368477899',
                     'course_id': 'foo/bar/baz',
-                    'enterprise_uuid': '',
                     'path': self.path_with_course,
                     'page': None
                 }
@@ -321,7 +318,7 @@ class TestTrackViews(EventTrackingTestCase):  # lint-amnesty, pylint: disable=mi
         }
 
         task_info = {
-            str(sentinel.task_key): sentinel.task_value
+            six.text_type(sentinel.task_key): sentinel.task_value
         }
         expected_event_data = dict(task_info)
         expected_event_data.update(self.event)

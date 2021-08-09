@@ -8,7 +8,7 @@ import json
 import logging
 
 import six
-import waffle  # lint-amnesty, pylint: disable=invalid-django-waffle-import
+import waffle
 from babel.dates import format_datetime
 from babel.numbers import get_currency_symbol
 from django.contrib.auth.decorators import login_required

@@ -8,7 +8,7 @@ from django.core.validators import RegexValidator
 from django.db import models
 from django.db.models.signals import post_delete, post_save, pre_save
 from django.dispatch import receiver
-
+from django.utils.encoding import python_2_unicode_compatible
 from model_utils.models import TimeStampedModel
 from opaque_keys.edx.django.models import CourseKeyField
 
@@ -23,13 +23,15 @@ from openedx.core.djangolib.model_mixins import DeletableByUserValue
 from openedx.core.lib.cache_utils import request_cached
 # pylint: disable=unused-import
 from common.djangoapps.student.models import (
+    PendingEmailChange,
+    Registration,
+    UserProfile,
     get_retired_email_by_email,
     get_retired_username_by_username
 )
 from common.djangoapps.util.model_utils import (
     emit_settings_changed_event,
     get_changed_fields_dict,
-
 )
 
 
@@ -179,6 +181,7 @@ class UserOrgTag(TimeStampedModel, DeletableByUserValue):
         unique_together = ("user", "org", "key")
 
 
+@python_2_unicode_compatible
 class RetirementState(models.Model):
     """
     Stores the list and ordering of the steps of retirement, this should almost never change
@@ -210,6 +213,7 @@ class RetirementState(models.Model):
         return cls.objects.all().values_list('state_name', flat=True)
 
 
+@python_2_unicode_compatible
 class UserRetirementPartnerReportingStatus(TimeStampedModel):
     """
     When a user has been retired from LMS it will still need to be reported out to
@@ -239,6 +243,7 @@ class UserRetirementPartnerReportingStatus(TimeStampedModel):
         )
 
 
+@python_2_unicode_compatible
 class UserRetirementRequest(TimeStampedModel):
     """
     Records and perists every user retirement request.

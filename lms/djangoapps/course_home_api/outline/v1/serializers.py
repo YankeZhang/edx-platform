@@ -6,7 +6,6 @@ from django.utils.translation import ngettext
 from rest_framework import serializers
 
 from lms.djangoapps.course_home_api.dates.v1.serializers import DateSummarySerializer
-from lms.djangoapps.course_home_api.progress.v1.serializers import CertificateDataSerializer
 from lms.djangoapps.course_home_api.mixins import DatesBannerSerializerMixin, VerifiedModeSerializerMixin
 
 
@@ -54,7 +53,6 @@ class CourseBlockSerializer(serializers.Serializer):
                 'legacy_web_url': block['legacy_web_url'] if enable_links else None,
                 'resume_block': block.get('resume_block', False),
                 'type': block_type,
-                'has_scheduled_content': block.get('has_scheduled_content'),
             },
         }
         for child in children:
@@ -66,7 +64,7 @@ class CourseGoalsSerializer(serializers.Serializer):
     """
     Serializer for Course Goal data
     """
-    goal_options = serializers.ListField(default=[])
+    goal_options = serializers.ListField()
     selected_goal = serializers.DictField()
 
 
@@ -115,16 +113,13 @@ class OutlineTabSerializer(DatesBannerSerializerMixin, VerifiedModeSerializerMix
     Serializer for the Outline Tab
     """
     access_expiration = serializers.DictField()
-    cert_data = CertificateDataSerializer()
     course_blocks = CourseBlockSerializer()
     course_goals = CourseGoalsSerializer()
     course_tools = CourseToolSerializer(many=True)
     dates_widget = DatesWidgetSerializer()
     enroll_alert = EnrollAlertSerializer()
-    enrollment_mode = serializers.CharField()
     handouts_html = serializers.CharField()
     has_ended = serializers.BooleanField()
     offer = serializers.DictField()
     resume_course = ResumeCourseSerializer()
     welcome_message_html = serializers.CharField()
-    user_has_passing_grade = serializers.BooleanField()

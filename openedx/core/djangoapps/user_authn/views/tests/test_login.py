@@ -39,7 +39,6 @@ from openedx.core.djangolib.testing.utils import CacheIsolationTestCase, skip_un
 from openedx.core.djangoapps.site_configuration.tests.mixins import SiteMixin
 from openedx.core.lib.api.test_utils import ApiTestCase
 from openedx.features.enterprise_support.tests.factories import EnterpriseCustomerUserFactory
-from common.djangoapps.student.models import LoginFailures
 from common.djangoapps.util.password_policy_validators import DEFAULT_MAX_PASSWORD_LENGTH
 
 
@@ -659,13 +658,11 @@ class LoginTest(SiteMixin, CacheIsolationTestCase):
             response_content = json.loads(response.content.decode('utf-8'))
         assert response_content.get('success')
 
-    @patch.dict(settings.FEATURES, {"ENABLE_MAX_FAILED_LOGIN_ATTEMPTS": True})
     @override_settings(PASSWORD_POLICY_COMPLIANCE_ROLLOUT_CONFIG={'ENFORCE_COMPLIANCE_ON_LOGIN': True})
     def test_check_password_policy_compliance_exception(self):
         """
         Tests _enforce_password_policy_compliance fails with an exception thrown
         """
-        assert not LoginFailures.objects.filter(user=self.user).exists()
         enforce_compliance_on_login = 'openedx.core.djangoapps.password_policy.compliance.enforce_compliance_on_login'
         with patch(enforce_compliance_on_login) as mock_enforce_compliance_on_login:
             mock_enforce_compliance_on_login.side_effect = NonCompliantPasswordException()
@@ -677,9 +674,6 @@ class LoginTest(SiteMixin, CacheIsolationTestCase):
         assert not response_content.get('success')
         assert len(mail.outbox) == 1
         assert 'Password reset' in mail.outbox[0].subject
-        failure_record = LoginFailures.objects.get(user=self.user)
-        assert failure_record.failure_count == 1
-        LoginFailures.clear_lockout_counter(user=self.user)
 
     @override_settings(PASSWORD_POLICY_COMPLIANCE_ROLLOUT_CONFIG={'ENFORCE_COMPLIANCE_ON_LOGIN': True})
     def test_check_password_policy_compliance_warning(self):
@@ -963,7 +957,7 @@ class LoginSessionViewTest(ApiTestCase):
 
     def setUp(self):
         super().setUp()
-        self.url = reverse("user_api_login_session", kwargs={'api_version': 'v1'})
+        self.url = reverse("user_api_login_session")
 
     @ddt.data("get", "post")
     def test_auth_disabled(self, method):
@@ -992,7 +986,7 @@ class LoginSessionViewTest(ApiTestCase):
         # Verify that the form description matches what we expect
         form_desc = json.loads(response.content.decode('utf-8'))
         assert form_desc['method'] == 'post'
-        assert form_desc['submit_url'] == reverse('user_api_login_session', kwargs={'api_version': 'v1'})
+        assert form_desc['submit_url'] == reverse('user_api_login_session')
         assert form_desc['fields'] == [{'name': 'email', 'defaultValue': '', 'type': 'email', 'required': True,
                                         'label': 'Email', 'placeholder': '',
                                         'instructions': 'The email address you used to register with {platform_name}'
@@ -1055,16 +1049,6 @@ class LoginSessionViewTest(ApiTestCase):
             'edx.bi.user.account.authenticated',
             {'category': 'conversion', 'provider': None, 'label': track_label}
         )
-
-    def test_login_with_username(self):
-        UserFactory.create(username=self.USERNAME, email=self.EMAIL, password=self.PASSWORD)
-        data = {
-            "email_or_username": self.USERNAME,
-            "password": self.PASSWORD,
-        }
-        self.url = reverse("user_api_login_session", kwargs={'api_version': 'v2'})
-        response = self.client.post(self.url, data)
-        self.assertHttpOK(response)
 
     def test_session_cookie_expiry(self):
         # Create a test user

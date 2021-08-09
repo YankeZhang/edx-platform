@@ -2,223 +2,27 @@
 Provide django models to back the discussions app
 """
 from __future__ import annotations
-
 import logging
-from enum import Enum
-from collections import namedtuple
 
-from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.translation import ugettext_lazy as _
 from django_mysql.models import ListCharField
 from jsonfield import JSONField
-from lti_consumer.models import LtiConfiguration
 from model_utils.models import TimeStampedModel
 from opaque_keys.edx.django.models import LearningContextKeyField
 from opaque_keys.edx.keys import CourseKey
 from simple_history.models import HistoricalRecords
 
+from lti_consumer.models import LtiConfiguration
+
 from openedx.core.djangoapps.config_model_utils.models import StackedConfigurationModel
 from openedx.core.djangoapps.content.course_overviews.models import CourseOverview
-from openedx.core.djangoapps.site_configuration import helpers as configuration_helpers
 
 log = logging.getLogger(__name__)
 
+
 DEFAULT_PROVIDER_TYPE = 'legacy'
-
-ProviderExternalLinks = namedtuple(
-    'ProviderExternalLinks',
-    ['learn_more', 'configuration', 'general', 'accessibility', 'contact_email']
-)
-
-
-class Features(Enum):
-    """
-    Features to be used/mapped in discussion providers
-    """
-    ANONYMOUS_POSTING = 'anonymous-posting'
-
-    # Todo: https://openedx.atlassian.net/browse/TNL-8546
-    # This will be added back in once we add LTI v1.3 support for discussion
-    # configuration in the future.  https://openedx.atlassian.net/browse/TNL-8365
-    # AUTOMATIC_LEARNER_ENROLLMENT = 'automatic-learner-enrollment'
-
-    BLACKOUT_DISCUSSION_DATES = 'blackout-discussion-dates'
-    COMMUNITY_TA_SUPPORT = 'community-ta-support'
-    COURSE_COHORT_SUPPORT = 'course-cohort-support'
-    DISCUSSION_PAGE = 'discussion-page'
-    INTERNATIONALIZATION_SUPPORT = 'internationalization-support'
-    PRIMARY_DISCUSSION_APP_EXPERIENCE = 'primary-discussion-app-experience'
-    QUESTION_DISCUSSION_SUPPORT = 'question-discussion-support'
-    REPORT_FLAG_CONTENT_TO_MODERATORS = 'report/flag-content-to-moderators'
-    RESEARCH_DATA_EVENTS = 'research-data-events'
-    WCAG_2_0_SUPPORT = 'wcag-2.0-support'
-    WCAG_2_1 = 'wcag-2.1'
-    ADVANCED_IN_CONTEXT_DISCUSSION = 'advanced-in-context-discussion'
-    DIRECT_MESSAGES_FROM_INSTRUCTORS = 'direct-messages-from-instructors'
-    DISCUSSION_CONTENT_PROMPTS = 'discussion-content-prompts'
-    EMAIL_NOTIFICATIONS = 'email-notifications'
-    EMBEDDED_COURSE_SECTIONS = 'embedded-course-sections'
-    GRADED_DISCUSSIONS = 'graded-discussions'
-    IN_PLATFORM_NOTIFICATIONS = 'in-platform-notifications'
-    LTI_ADVANCED_SHARING_MODE = 'lti-advanced-sharing-mode'
-    LTI_BASIC_CONFIGURATION = 'lti-basic-configuration'
-    SIMPLIFIED_IN_CONTEXT_DISCUSSION = 'simplified-in-context-discussion'
-    USER_MENTIONS = 'user-mentions'
-
-
-def pii_sharing_required_message(provider_name):
-    """
-    Build an i18n'ed message stating PII sharing is required for the provider.
-    """
-    return _(
-        '{provider} requires that LTI advanced sharing be enabled for your course,'
-        ' as this provider uses email address and username to personalize'
-        ' the experience. Please contact {support_contact} to enable this feature.'
-    ).format(
-        provider=provider_name,
-        support_contact=(
-            configuration_helpers.get_value(
-                'CONTACT_EMAIL',
-                getattr(settings, 'CONTACT_EMAIL', _('technical support'))
-            )
-        )
-    )
-
-
-AVAILABLE_PROVIDER_MAP = {
-    'legacy': {
-        'features': [
-            Features.ANONYMOUS_POSTING.value,
-            Features.BLACKOUT_DISCUSSION_DATES.value,
-            Features.COMMUNITY_TA_SUPPORT.value,
-            Features.COURSE_COHORT_SUPPORT.value,
-            Features.DISCUSSION_PAGE.value,
-            Features.INTERNATIONALIZATION_SUPPORT.value,
-            Features.PRIMARY_DISCUSSION_APP_EXPERIENCE.value,
-            Features.QUESTION_DISCUSSION_SUPPORT.value,
-            Features.RESEARCH_DATA_EVENTS.value,
-            Features.REPORT_FLAG_CONTENT_TO_MODERATORS.value,
-            Features.WCAG_2_0_SUPPORT.value,
-            Features.WCAG_2_1.value,
-        ],
-        'external_links': ProviderExternalLinks(
-            learn_more='',
-            configuration='',
-            general='',
-            accessibility='',
-            contact_email='',
-        )._asdict(),
-        'messages': [],
-        'has_full_support': True
-    },
-    'piazza': {
-        'features': [
-            Features.ANONYMOUS_POSTING.value,
-            Features.BLACKOUT_DISCUSSION_DATES.value,
-            Features.COMMUNITY_TA_SUPPORT.value,
-            Features.DIRECT_MESSAGES_FROM_INSTRUCTORS.value,
-            Features.DISCUSSION_CONTENT_PROMPTS.value,
-            Features.DISCUSSION_PAGE.value,
-            Features.EMAIL_NOTIFICATIONS.value,
-            Features.LTI_BASIC_CONFIGURATION.value,
-            Features.QUESTION_DISCUSSION_SUPPORT.value,
-            Features.REPORT_FLAG_CONTENT_TO_MODERATORS.value,
-            Features.USER_MENTIONS.value,
-            Features.WCAG_2_0_SUPPORT.value,
-        ],
-        'external_links': ProviderExternalLinks(
-            learn_more='https://piazza.com/product/overview',
-            configuration='https://support.piazza.com/support/solutions/articles/48001065447-configure-piazza-within-edx',  # pylint: disable=line-too-long
-            general='https://support.piazza.com/',
-            accessibility='https://piazza.com/product/accessibility',
-            contact_email='team@piazza.com',
-        )._asdict(),
-        'messages': [],
-        'has_full_support': False
-    },
-    'yellowdig': {
-        'features': [
-            Features.ANONYMOUS_POSTING.value,
-            Features.COMMUNITY_TA_SUPPORT.value,
-            Features.DIRECT_MESSAGES_FROM_INSTRUCTORS.value,
-            Features.EMAIL_NOTIFICATIONS.value,
-            Features.GRADED_DISCUSSIONS.value,
-            Features.IN_PLATFORM_NOTIFICATIONS.value,
-            Features.LTI_BASIC_CONFIGURATION.value,
-            Features.PRIMARY_DISCUSSION_APP_EXPERIENCE.value,
-            Features.QUESTION_DISCUSSION_SUPPORT.value,
-            Features.REPORT_FLAG_CONTENT_TO_MODERATORS.value,
-            Features.RESEARCH_DATA_EVENTS.value,
-            Features.USER_MENTIONS.value,
-            Features.WCAG_2_0_SUPPORT.value,
-        ],
-        'external_links': ProviderExternalLinks(
-            learn_more='https://www.youtube.com/watch?v=ZACief-qMwY',
-            configuration='',
-            general='https://hubs.ly/H0J5Bn70',
-            accessibility='',
-            contact_email='learnmore@yellowdig.com',
-        )._asdict(),
-        'messages': [pii_sharing_required_message('Yellowdig')],
-        'has_full_support': False,
-        'admin_only_config': True,
-    },
-    'inscribe': {
-        'features': [
-            Features.PRIMARY_DISCUSSION_APP_EXPERIENCE.value,
-            Features.LTI_BASIC_CONFIGURATION.value,
-        ],
-        'external_links': ProviderExternalLinks(
-            learn_more='',
-            configuration='',
-            general='https://www.inscribeapp.com/',
-            accessibility='',
-            contact_email='',
-        )._asdict(),
-        'messages': [pii_sharing_required_message('InScribe')],
-        'has_full_support': False
-    },
-    'discourse': {
-        'features': [
-            Features.LTI_ADVANCED_SHARING_MODE.value,
-            Features.LTI_BASIC_CONFIGURATION.value,
-            Features.PRIMARY_DISCUSSION_APP_EXPERIENCE.value,
-        ],
-        'external_links': ProviderExternalLinks(
-            learn_more='',
-            configuration='',
-            general='http://discourse.org/',
-            accessibility='',
-            contact_email='',
-        )._asdict(),
-        'messages': [pii_sharing_required_message('Discourse')],
-        'has_full_support': False
-    },
-    'ed-discuss': {
-        'features': [
-            Features.ANONYMOUS_POSTING.value,
-            Features.COMMUNITY_TA_SUPPORT.value,
-            Features.EMAIL_NOTIFICATIONS.value,
-            Features.INTERNATIONALIZATION_SUPPORT.value,
-            Features.LTI_BASIC_CONFIGURATION.value,
-            Features.PRIMARY_DISCUSSION_APP_EXPERIENCE.value,
-            Features.QUESTION_DISCUSSION_SUPPORT.value,
-            Features.REPORT_FLAG_CONTENT_TO_MODERATORS.value,
-            Features.WCAG_2_0_SUPPORT.value,
-        ],
-        'external_links': ProviderExternalLinks(
-            learn_more='',
-            configuration='',
-            general='https://edstem.org/us/',
-            accessibility='',
-            contact_email='',
-        )._asdict(),
-        'messages': [],
-        'has_full_support': False
-    }
-}
 
 
 def get_supported_providers() -> list[str]:
@@ -375,14 +179,6 @@ class DiscussionsConfiguration(TimeStampedModel):
             enabled=self.enabled,
         )
 
-    def supports(self, feature: str) -> bool:
-        """
-        Check if the provider supports some feature
-        """
-        features = AVAILABLE_PROVIDER_MAP.get(self.provider_type)['features'] or []
-        has_support = bool(feature in features)
-        return has_support
-
     @classmethod
     def is_enabled(cls, context_key: CourseKey) -> bool:
         """
@@ -408,7 +204,6 @@ class DiscussionsConfiguration(TimeStampedModel):
                 provider_type=DEFAULT_PROVIDER_TYPE,
             )
         return configuration
-
     # pylint: enable=undefined-variable
 
     @property

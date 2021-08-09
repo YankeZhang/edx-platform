@@ -24,7 +24,7 @@ from lms.djangoapps.program_enrollments.api import (
     fetch_program_enrollments,
     fetch_program_enrollments_by_student,
     get_provider_slug,
-    get_saml_providers_for_organization,
+    get_saml_provider_for_organization,
     iter_program_course_grades,
     write_program_course_enrollments,
     write_program_enrollments
@@ -770,7 +770,7 @@ class UserProgramReadOnlyAccessView(DeveloperErrorViewMixin, PaginatedAPIView):
                 if course_run_program and course_run_program.get('type').lower() == program_type_filter:
                     program_dict[course_run_program['uuid']] = course_run_program
 
-        return program_dict.values()  # lint-amnesty, pylint: disable=dict-values-not-iterating
+        return program_dict.values()
 
 
 class UserProgramCourseEnrollmentView(
@@ -993,13 +993,11 @@ class EnrollmentDataResetView(APIView):
         except Organization.DoesNotExist:
             return Response(f'organization {org_key} not found', status.HTTP_404_NOT_FOUND)
 
-        providers = []
         try:
-            providers = get_saml_providers_for_organization(organization)
+            provider = get_saml_provider_for_organization(organization)
         except ProviderDoesNotExistException:
             pass
-
-        for provider in providers:
+        else:
             idp_slug = get_provider_slug(provider)
             call_command('remove_social_auth_users', idp_slug, force=True)
 

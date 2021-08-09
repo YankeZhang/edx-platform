@@ -5,23 +5,23 @@ Unit tests for course_goals.api methods.
 
 from unittest import mock
 
-from django.contrib.auth import get_user_model
+from django.contrib.auth.models import User  # lint-amnesty, pylint: disable=imported-auth-user
 from django.test.utils import override_settings
 from django.urls import reverse
 from rest_framework.test import APIClient
 
 from common.djangoapps.student.models import CourseEnrollment
+from common.djangoapps.track.tests import EventTrackingTestCase
 from lms.djangoapps.course_goals.models import CourseGoal
 from xmodule.modulestore.tests.django_utils import SharedModuleStoreTestCase
 from xmodule.modulestore.tests.factories import CourseFactory
 
+TEST_PASSWORD = 'test'
 EVENT_NAME_ADDED = 'edx.course.goal.added'
 EVENT_NAME_UPDATED = 'edx.course.goal.updated'
 
-User = get_user_model()
 
-
-class TestCourseGoalsAPI(SharedModuleStoreTestCase):
+class TestCourseGoalsAPI(EventTrackingTestCase, SharedModuleStoreTestCase):
     """
     Testing the Course Goals API.
     """
@@ -40,17 +40,13 @@ class TestCourseGoalsAPI(SharedModuleStoreTestCase):
 
         self.apiUrl = reverse('course_goals_api:v0:course_goal-list')
 
-    @mock.patch('lms.djangoapps.course_goals.handlers.segment.track')
+    @mock.patch('lms.djangoapps.course_goals.views.segment.track')
     @override_settings(LMS_SEGMENT_KEY="foobar")
-    def test_add_valid_goal(self, segment_call):
+    def test_add_valid_goal(self, ga_call):
         """ Ensures a correctly formatted post succeeds."""
         response = self.post_course_goal(valid=True, goal_key='certify')
-        segment_call.assert_called_once_with(self.user.id, EVENT_NAME_ADDED, {
-            'courserun_key': str(self.course.id),
-            'goal_key': 'certify',
-            'days_per_week': 0,
-            'subscribed_to_reminders': False,
-        })
+        assert self.get_event((- 1))['name'] == EVENT_NAME_ADDED
+        ga_call.assert_called_with(self.user.id, EVENT_NAME_ADDED)
         assert response.status_code == 201
 
         current_goals = CourseGoal.objects.filter(user=self.user, course_key=self.course.id)
@@ -65,6 +61,7 @@ class TestCourseGoalsAPI(SharedModuleStoreTestCase):
 
     def test_add_without_goal_key(self):
         """ Ensures if no goal key provided, post does not succeed. """
+
         response = self.post_course_goal(goal_key=None)
         assert len(CourseGoal.objects.filter(user=self.user, course_key=self.course.id)) == 0
         self.assertContains(
@@ -73,29 +70,16 @@ class TestCourseGoalsAPI(SharedModuleStoreTestCase):
             status_code=400
         )
 
-    @mock.patch('lms.djangoapps.course_goals.handlers.segment.track')
+    @mock.patch('lms.djangoapps.course_goals.views.segment.track')
     @override_settings(LMS_SEGMENT_KEY="foobar")
-    def test_update_goal(self, segment_call):
+    def test_update_goal(self, ga_call):
         """ Ensures that repeated course goal post events do not create new instances of the goal. """
         self.post_course_goal(valid=True, goal_key='explore')
         self.post_course_goal(valid=True, goal_key='certify')
         self.post_course_goal(valid=True, goal_key='unsure')
+        assert self.get_event((- 1))['name'] == EVENT_NAME_UPDATED
 
-        segment_call.assert_any_call(self.user.id, EVENT_NAME_ADDED, {
-            'courserun_key': str(self.course.id), 'goal_key': 'explore',
-            'days_per_week': 0,
-            'subscribed_to_reminders': False,
-        })
-        segment_call.assert_any_call(self.user.id, EVENT_NAME_UPDATED, {
-            'courserun_key': str(self.course.id), 'goal_key': 'certify',
-            'days_per_week': 0,
-            'subscribed_to_reminders': False,
-        })
-        segment_call.assert_any_call(self.user.id, EVENT_NAME_UPDATED, {
-            'courserun_key': str(self.course.id), 'goal_key': 'unsure',
-            'days_per_week': 0,
-            'subscribed_to_reminders': False,
-        })
+        ga_call.assert_called_with(self.user.id, EVENT_NAME_UPDATED)
         current_goals = CourseGoal.objects.filter(user=self.user, course_key=self.course.id)
         assert len(current_goals) == 1
         assert current_goals[0].goal_key == 'unsure'

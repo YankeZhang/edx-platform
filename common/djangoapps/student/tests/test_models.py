@@ -1,9 +1,9 @@
 # lint-amnesty, pylint: disable=missing-module-docstring
 import datetime
 import hashlib
-from unittest import mock
 
 import ddt
+import mock
 import pytz
 from crum import set_current_request
 from django.contrib.auth.models import AnonymousUser, User  # lint-amnesty, pylint: disable=imported-auth-user
@@ -26,15 +26,14 @@ from common.djangoapps.student.models import (
     ManualEnrollmentAudit,
     PendingEmailChange,
     PendingNameChange,
-    UserCelebration,
-    UserProfile
+    UserCelebration
 )
-from common.djangoapps.student.models_api import get_name
 from common.djangoapps.student.tests.factories import AccountRecoveryFactory, CourseEnrollmentFactory, UserFactory
 from lms.djangoapps.courseware.models import DynamicUpgradeDeadlineConfiguration
 from lms.djangoapps.courseware.toggles import (
     COURSEWARE_MICROFRONTEND_PROGRESS_MILESTONES,
     COURSEWARE_MICROFRONTEND_PROGRESS_MILESTONES_STREAK_CELEBRATION,
+    REDIRECT_TO_COURSEWARE_MICROFRONTEND
 )
 from openedx.core.djangoapps.content.course_overviews.models import CourseOverview
 from openedx.core.djangoapps.schedules.models import Schedule
@@ -99,7 +98,7 @@ class CourseEnrollmentTests(SharedModuleStoreTestCase):  # lint-amnesty, pylint:
         enrollments = CourseEnrollment.enrollments_for_user(self.user).order_by(Lower('course_id'))
         hash_elements = [self.user.username]
         hash_elements += [
-            f'{str(enrollment.course_id).lower()}={enrollment.mode.lower()}' for
+            '{course_id}={mode}'.format(course_id=str(enrollment.course_id).lower(), mode=enrollment.mode.lower()) for
             enrollment in enrollments]
         expected = hashlib.md5('&'.join(hash_elements).encode('utf-8')).hexdigest()
         assert CourseEnrollment.generate_enrollment_status_hash(self.user) == expected
@@ -249,6 +248,7 @@ class CourseEnrollmentTests(SharedModuleStoreTestCase):  # lint-amnesty, pylint:
         assert enrollment_refetched.all()[0] == enrollment
 
 
+@override_waffle_flag(REDIRECT_TO_COURSEWARE_MICROFRONTEND, active=True)
 @override_waffle_flag(COURSEWARE_MICROFRONTEND_PROGRESS_MILESTONES, active=True)
 @override_waffle_flag(COURSEWARE_MICROFRONTEND_PROGRESS_MILESTONES_STREAK_CELEBRATION, active=True)
 class UserCelebrationTests(SharedModuleStoreTestCase):
@@ -264,7 +264,7 @@ class UserCelebrationTests(SharedModuleStoreTestCase):
     def setUp(self):
         super().setUp()
         self.user = UserFactory()
-        self.request = mock.MagicMock()
+        self.request = mock.Mock()
         self.request.user = self.user
         CourseEnrollmentFactory(course_id=self.course_key)
         UserCelebration.STREAK_LENGTHS_TO_CELEBRATE = [3]
@@ -730,30 +730,3 @@ class TestUserPostSaveCallback(SharedModuleStoreTestCase):
                 course_enrollment.save()
 
         return user
-
-
-class TestProfile(SharedModuleStoreTestCase):
-    """
-    Tests for the user profile
-    """
-    def setUp(self):
-        super().setUp()
-        self.user = UserFactory.create()
-        self.profile = UserProfile.objects.get(user_id=self.user.id)
-        self.name = self.profile.name
-        self.course = CourseFactory.create()
-
-    def test_name(self):
-        """
-        Test retrieval of the name
-        """
-        assert self.name
-        name = get_name(self.user.id)
-        assert name == self.name
-
-    def test_name_missing_profile(self):
-        """
-        Test retrieval of the name when the user profile doesn't exist
-        """
-        name = get_name(None)
-        assert not name

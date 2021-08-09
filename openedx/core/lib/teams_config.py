@@ -27,19 +27,19 @@ class TeamsConfig:  # pylint: disable=eq-without-hash
         """
         self._data = data if isinstance(data, dict) else {}
 
-    def __str__(self):
+    def __unicode__(self):
         """
         Return user-friendly string.
 
         TODO move this code to __str__ after Py3 upgrade.
         """
-        return f"Teams configuration for {len(self.teamsets)} team-sets"
+        return "Teams configuration for {} team-sets".format(len(self.teamsets))
 
     def __str__(self):
         """
         Return user-friendly string.
         """
-        return "Teams configuration for {} team-sets".format(len(self.teamsets))
+        return str(self.__unicode__())
 
     def __repr__(self):
         """
@@ -170,11 +170,19 @@ class TeamsetConfig:  # pylint: disable=eq-without-hash
         """
         self._data = data if isinstance(data, dict) else {}
 
+    def __unicode__(self):
+        """
+        Return user-friendly string.
+
+        TODO move this code to __str__ after Py3 upgrade.
+        """
+        return self.name
+
     def __str__(self):
         """
         Return user-friendly string.
         """
-        return self.name
+        return str(self.__unicode__())
 
     def __repr__(self):
         """

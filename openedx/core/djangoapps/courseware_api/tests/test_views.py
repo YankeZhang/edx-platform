@@ -2,7 +2,7 @@
 Tests for courseware API
 """
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime
 from urllib.parse import urlencode
 from typing import Optional
 
@@ -14,8 +14,6 @@ from django.contrib.auth import get_user_model
 from django.test.client import RequestFactory
 
 from edx_toggles.toggles.testutils import override_waffle_flag
-from common.djangoapps.course_modes.models import CourseMode
-from common.djangoapps.course_modes.tests.factories import CourseModeFactory
 from lms.djangoapps.certificates.api import get_certificate_url
 from lms.djangoapps.certificates.tests.factories import (
     GeneratedCertificateFactory, LinkedInAddToProfileConfigurationFactory
@@ -26,28 +24,20 @@ from lms.djangoapps.courseware.tests.helpers import MasqueradeMixin
 from lms.djangoapps.courseware.toggles import (
     COURSEWARE_MICROFRONTEND_PROGRESS_MILESTONES,
     COURSEWARE_MICROFRONTEND_PROGRESS_MILESTONES_STREAK_CELEBRATION,
-    COURSEWARE_MICROFRONTEND_SPECIAL_EXAMS,
-    COURSEWARE_MICROFRONTEND_PROCTORED_EXAMS,
+    REDIRECT_TO_COURSEWARE_MICROFRONTEND
 )
-from lms.djangoapps.experiments.testutils import override_experiment_waffle_flag
-from lms.djangoapps.experiments.utils import STREAK_DISCOUNT_EXPERIMENT_FLAG
 from lms.djangoapps.verify_student.services import IDVerificationService
 from common.djangoapps.student.models import (
     CourseEnrollment, CourseEnrollmentCelebration
 )
 from common.djangoapps.student.roles import CourseInstructorRole
 from common.djangoapps.student.tests.factories import CourseEnrollmentCelebrationFactory, UserFactory
-from openedx.core.djangoapps.agreements.api import create_integrity_signature
-from openedx.core.djangoapps.agreements.toggles import ENABLE_INTEGRITY_SIGNATURE
-from xmodule.data import CertificatesDisplayBehaviors
 from xmodule.modulestore.django import modulestore
 from xmodule.modulestore.tests.django_utils import TEST_DATA_SPLIT_MODULESTORE, SharedModuleStoreTestCase
 from xmodule.modulestore.tests.factories import ItemFactory, ToyCourseFactory
 
 
 User = get_user_model()
-
-_NEXT_WEEK = datetime.now() + timedelta(days=7)
 
 
 @unittest.skipUnless(settings.ROOT_URLCONF == 'lms.urls', 'Test only valid in lms')
@@ -67,8 +57,6 @@ class BaseCoursewareTests(SharedModuleStoreTestCase):
             enrollment_end=datetime(2028, 1, 1, 1, 1, 1),
             emit_signals=True,
             modulestore=cls.store,
-            certificate_available_date=_NEXT_WEEK,
-            certificates_display_behavior=CertificatesDisplayBehaviors.END_WITH_DATE
         )
         cls.chapter = ItemFactory(parent=cls.course, category='chapter')
         cls.sequence = ItemFactory(parent=cls.chapter, category='sequential', display_name='sequence')
@@ -82,7 +70,7 @@ class BaseCoursewareTests(SharedModuleStoreTestCase):
         )
         cls.instructor = UserFactory(
             username='instructor',
-            email='instructor@example.com',
+            email=u'instructor@example.com',
             password='foo',
             is_staff=False
         )
@@ -100,6 +88,7 @@ class BaseCoursewareTests(SharedModuleStoreTestCase):
 
 
 @ddt.ddt
+@override_waffle_flag(REDIRECT_TO_COURSEWARE_MICROFRONTEND, active=True)
 @override_waffle_flag(COURSEWARE_MICROFRONTEND_PROGRESS_MILESTONES, active=True)
 @override_waffle_flag(COURSEWARE_MICROFRONTEND_PROGRESS_MILESTONES_STREAK_CELEBRATION, active=True)
 class CourseApiTestViews(BaseCoursewareTests, MasqueradeMixin):
@@ -115,14 +104,6 @@ class CourseApiTestViews(BaseCoursewareTests, MasqueradeMixin):
         )
         cls.store.update_item(cls.course, cls.user.id)
         LinkedInAddToProfileConfigurationFactory.create()
-        CourseModeFactory(course_id=cls.course.id, mode_slug=CourseMode.AUDIT)
-        CourseModeFactory(
-            course_id=cls.course.id,
-            mode_slug=CourseMode.VERIFIED,
-            expiration_datetime=datetime(3028, 1, 1),
-            min_price=149,
-            sku='ABCD1234',
-        )
 
     @ddt.data(
         (True, None, ACCESS_DENIED),
@@ -141,6 +122,8 @@ class CourseApiTestViews(BaseCoursewareTests, MasqueradeMixin):
         with mock.patch('lms.djangoapps.courseware.access_utils.check_public_access', check_public_access):
             if not logged_in:
                 self.client.logout()
+            if enrollment_mode:
+                CourseEnrollment.enroll(self.user, self.course.id, enrollment_mode)
             if enrollment_mode == 'verified':
                 cert = GeneratedCertificateFactory.create(
                     user=self.user,
@@ -148,8 +131,6 @@ class CourseApiTestViews(BaseCoursewareTests, MasqueradeMixin):
                     status='downloadable',
                     mode='verified',
                 )
-            if enrollment_mode:
-                CourseEnrollment.enroll(self.user, self.course.id, enrollment_mode)
 
             response = self.client.get(self.url)
             assert response.status_code == 200
@@ -203,9 +184,9 @@ class CourseApiTestViews(BaseCoursewareTests, MasqueradeMixin):
                 # multiple checks use this handler
                 check_public_access.assert_called()
                 assert response.data['enrollment']['mode'] is None
-                assert response.data['course_access']['has_access']
+                assert response.data['can_load_courseware']['has_access']
             else:
-                assert not response.data['course_access']['has_access']
+                assert not response.data['can_load_courseware']['has_access']
 
     @ddt.data(
         # Who has access to MFE courseware?
@@ -215,7 +196,7 @@ class CourseApiTestViews(BaseCoursewareTests, MasqueradeMixin):
             "username": "student",
             "enroll_user": True,
             "masquerade_role": None,
-            "expect_course_access": True,
+            "expect_can_load_courseware": True,
         },
         {
             # Un-enrolled learners should NOT have access.
@@ -223,7 +204,7 @@ class CourseApiTestViews(BaseCoursewareTests, MasqueradeMixin):
             "username": "student",
             "enroll_user": False,
             "masquerade_role": None,
-            "expect_course_access": False,
+            "expect_can_load_courseware": False,
         },
         {
             # Un-enrolled instructors should have access.
@@ -231,7 +212,7 @@ class CourseApiTestViews(BaseCoursewareTests, MasqueradeMixin):
             "username": "instructor",
             "enroll_user": False,
             "masquerade_role": None,
-            "expect_course_access": True,
+            "expect_can_load_courseware": True,
         },
         {
             # Un-enrolled instructors masquerading as students should have access.
@@ -239,7 +220,7 @@ class CourseApiTestViews(BaseCoursewareTests, MasqueradeMixin):
             "username": "instructor",
             "enroll_user": False,
             "masquerade_role": "student",
-            "expect_course_access": True,
+            "expect_can_load_courseware": True,
         },
         {
             # If MFE is not visible, enrolled learners shouldn't have access.
@@ -247,7 +228,7 @@ class CourseApiTestViews(BaseCoursewareTests, MasqueradeMixin):
             "username": "student",
             "enroll_user": True,
             "masquerade_role": None,
-            "expect_course_access": False,
+            "expect_can_load_courseware": False,
         },
         {
             # If MFE is not visible, instructors shouldn't have access.
@@ -255,7 +236,7 @@ class CourseApiTestViews(BaseCoursewareTests, MasqueradeMixin):
             "username": "instructor",
             "enroll_user": False,
             "masquerade_role": None,
-            "expect_course_access": False,
+            "expect_can_load_courseware": False,
         },
         {
             # If MFE is not visible, masquerading instructors shouldn't have access.
@@ -263,20 +244,21 @@ class CourseApiTestViews(BaseCoursewareTests, MasqueradeMixin):
             "username": "instructor",
             "enroll_user": False,
             "masquerade_role": "student",
-            "expect_course_access": False,
+            "expect_can_load_courseware": False,
         },
+
     )
     @ddt.unpack
-    def test_course_access(
+    def test_can_load_courseware(
             self,
             mfe_is_visible: bool,
             username: str,
             enroll_user: bool,
             masquerade_role: Optional[str],
-            expect_course_access: bool,
+            expect_can_load_courseware: bool,
     ):
         """
-        Test that course_access is calculated correctly based on
+        Test that can_load_courseware is calculated correctly based on
         access to MFE and access to the course itself.
         """
         user = User.objects.get(username=username)
@@ -294,84 +276,17 @@ class CourseApiTestViews(BaseCoursewareTests, MasqueradeMixin):
             response = self.client.get(self.url)
 
         assert response.status_code == 200
-        if expect_course_access:
-            assert response.data['course_access']['has_access']
+        if expect_can_load_courseware:
+            assert response.data['can_load_courseware']['has_access']
         else:
-            assert not response.data['course_access']['has_access']
+            assert not response.data['can_load_courseware']['has_access']
 
     def test_streak_data_in_response(self):
         """ Test that metadata endpoint returns data for the streak celebration """
         CourseEnrollment.enroll(self.user, self.course.id, 'audit')
-        with override_experiment_waffle_flag(STREAK_DISCOUNT_EXPERIMENT_FLAG, active=True):
-            with mock.patch('common.djangoapps.student.models.UserCelebration.perform_streak_updates', return_value=3):
-                response = self.client.get(self.url, content_type='application/json')
-                celebrations = response.json()['celebrations']
-                assert celebrations['streak_length_to_celebrate'] == 3
-                assert celebrations['streak_discount_experiment_enabled'] is True
-
-    @ddt.data(
-        (False, False),
-        (False, True),
-        (True, False),
-        (True, True),
-    )
-    @ddt.unpack
-    def test_special_exams_enabled_for_course(self, is_globally_enabled, is_waffle_enabled):
-        """ Ensure that special exams flag present in courseware meta data with expected value """
-        with mock.patch.dict('django.conf.settings.FEATURES', {'ENABLE_SPECIAL_EXAMS': is_globally_enabled}):
-            with override_waffle_flag(COURSEWARE_MICROFRONTEND_SPECIAL_EXAMS, active=is_waffle_enabled):
-                response = self.client.get(self.url)
-                assert response.status_code == 200
-                courseware_data = response.json()
-                assert 'is_mfe_special_exams_enabled' in courseware_data
-                assert courseware_data['is_mfe_special_exams_enabled'] == (is_globally_enabled and is_waffle_enabled)
-
-    @ddt.data(
-        (None, False, False, False),
-        ('verified', False, False, True),
-        ('masters', False, False, True),
-        ('audit', False, False, False),
-        ('verified', False, True, False),
-        ('masters', False, True, False),
-        ('verified', True, False, False),
-    )
-    @ddt.unpack
-    @override_waffle_flag(ENABLE_INTEGRITY_SIGNATURE, True)
-    def test_user_needs_integrity_signature(
-        self, enrollment_mode, is_staff, has_integrity_signature, needs_integrity_signature,
-    ):
-        """
-        Test that the correct value is returned if the user needs to sign the integrity agreement for the course.
-        """
-        if is_staff:
-            self.user.is_staff = True
-            self.user.save()
-        if enrollment_mode:
-            CourseEnrollment.enroll(self.user, self.course.id, enrollment_mode)
-        if has_integrity_signature:
-            create_integrity_signature(self.user.username, str(self.course.id))
-        response = self.client.get(self.url)
-        assert response.status_code == 200
-        courseware_data = response.json()
-        assert 'user_needs_integrity_signature' in courseware_data
-        assert courseware_data['user_needs_integrity_signature'] == needs_integrity_signature
-
-    @ddt.data(
-        (False, False),
-        (False, True),
-        (True, False),
-        (True, True),
-    )
-    @ddt.unpack
-    def test_proctored_exams_enabled_for_course(self, is_globally_enabled, is_waffle_enabled):
-        """ Ensure that proctored exams flag present in courseware meta data with expected value """
-        with mock.patch.dict('django.conf.settings.FEATURES', {'ENABLE_SPECIAL_EXAMS': is_globally_enabled}):
-            with override_waffle_flag(COURSEWARE_MICROFRONTEND_PROCTORED_EXAMS, active=is_waffle_enabled):
-                response = self.client.get(self.url)
-                assert response.status_code == 200
-                courseware_data = response.json()
-                assert 'is_mfe_proctored_exams_enabled' in courseware_data
-                assert courseware_data['is_mfe_proctored_exams_enabled'] == (is_globally_enabled and is_waffle_enabled)
+        response = self.client.get(self.url, content_type='application/json')
+        celebrations = response.json()['celebrations']
+        assert 'streak_length_to_celebrate' in celebrations
 
 
 class SequenceApiTestViews(BaseCoursewareTests):
@@ -419,16 +334,6 @@ class ResumeApiTestViews(BaseCoursewareTests, CompletionWaffleTestMixin):
         assert response.data['block_id'] == str(self.unit.location)
         assert response.data['unit_id'] == str(self.unit.location)
         assert response.data['section_id'] == str(self.sequence.location)
-
-    def test_resume_invalid_key(self):
-        """A resume key that does not exist should return null IDs (i.e. "redirect to first section")"""
-        self.override_waffle_switch(True)
-        submit_completions_for_testing(self.user, [self.course.id.make_usage_key('html', 'doesnotexist')])
-        response = self.client.get(self.url)
-        assert response.status_code == 200
-        assert response.data['block_id'] is None
-        assert response.data['unit_id'] is None
-        assert response.data['section_id'] is None
 
 
 @ddt.ddt

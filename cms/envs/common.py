@@ -340,6 +340,7 @@ FEATURES = {
     # Prevent auto auth from creating superusers or modifying existing users
     'RESTRICT_AUTOMATIC_AUTH': True,
 
+    'ENABLE_INSTRUCTOR_ANALYTICS': False,
     'PREVIEW_LMS_BASE': "preview.localhost:18000",
     'ENABLE_GRADE_DOWNLOADS': True,
     'ENABLE_MKTG_SITE': False,
@@ -354,8 +355,7 @@ FEATURES = {
     'ENABLE_READING_FROM_MULTIPLE_HISTORY_TABLES': True,
     'SHOW_FOOTER_LANGUAGE_SELECTOR': False,
     'ENABLE_ENROLLMENT_RESET': False,
-    # Settings for course import olx validation
-    'ENABLE_COURSE_OLX_VALIDATION': False,
+
     # .. toggle_name: FEATURES['DISABLE_MOBILE_COURSE_AVAILABLE']
     # .. toggle_implementation: DjangoSetting
     # .. toggle_default: False
@@ -451,17 +451,6 @@ FEATURES = {
     # .. toggle_creation_date: 2021-03-05
     # .. toggle_tickets: https://github.com/edx/edx-platform/pull/26106
     'ENABLE_HELP_LINK': True,
-
-    # .. toggle_name: FEATURES['ENABLE_V2_CERT_DISPLAY_SETTINGS']
-    # .. toggle_implementation: DjangoSetting
-    # .. toggle_default: False
-    # .. toggle_description: Whether to use the reimagined certificates_display_behavior and certificate_available_date
-    # .. settings. Will eventually become the default.
-    # .. toggle_use_cases: temporary
-    # .. toggle_creation_date: 2021-07-26
-    # .. toggle_target_removal_date: 2021-10-01
-    # .. toggle_tickets: 'https://openedx.atlassian.net/browse/MICROBA-1405'
-    'ENABLE_V2_CERT_DISPLAY_SETTINGS': False,
 }
 
 ENABLE_JASMINE = False
@@ -501,6 +490,11 @@ ENV_ROOT = REPO_ROOT.dirname()  # virtualenv dir /edx-platform is in
 COURSES_ROOT = ENV_ROOT / "data"
 
 GITHUB_REPO_ROOT = ENV_ROOT / "data"
+
+# TODO: This path modification exists as temporary support for deprecated import patterns.
+# It will be removed in an upcoming Open edX release.
+# See docs/decisions/0007-sys-path-modification-removal.rst
+sys.path.append(REPO_ROOT / 'import_shims' / 'studio')
 
 # For geolocation ip database
 GEOIP_PATH = REPO_ROOT / "common/static/data/geoip/GeoLite2-Country.mmdb"
@@ -988,9 +982,6 @@ SESSION_SERIALIZER = 'openedx.core.lib.session_serializers.PickleSerializer'
 SESSION_COOKIE_DOMAIN = ""
 SESSION_COOKIE_NAME = 'sessionid'
 
-# This is the domain that is used to set shared cookies between various sub-domains.
-SHARED_COOKIE_DOMAIN = ""
-
 # Site info
 SITE_NAME = "localhost"
 HTTPS = 'on'
@@ -1280,19 +1271,6 @@ WEBPACK_LOADER = {
 }
 WEBPACK_CONFIG_PATH = 'webpack.prod.config.js'
 
-
-############################ SERVICE_VARIANT ##################################
-
-# SERVICE_VARIANT specifies name of the variant used, which decides what JSON
-# configuration files are read during startup.
-SERVICE_VARIANT = os.environ.get('SERVICE_VARIANT', 'cms')
-
-# CONFIG_PREFIX specifies the prefix of the JSON configuration files,
-# based on the service variant. If no variant is use, don't use a
-# prefix.
-CONFIG_PREFIX = SERVICE_VARIANT + "." if SERVICE_VARIANT else ""
-
-
 ################################# CELERY ######################################
 
 # Message configuration
@@ -1319,28 +1297,22 @@ CELERY_SEND_TASK_SENT_EVENT = True
 CELERY_DEFAULT_EXCHANGE = 'edx.core'
 CELERY_DEFAULT_EXCHANGE_TYPE = 'direct'
 
-# Name the exchange and queues for each variant
-
-QUEUE_VARIANT = CONFIG_PREFIX.lower()
-
-CELERY_DEFAULT_EXCHANGE = f'edx.{QUEUE_VARIANT}core'
-
-HIGH_PRIORITY_QUEUE = f'edx.{QUEUE_VARIANT}core.high'
-DEFAULT_PRIORITY_QUEUE = f'edx.{QUEUE_VARIANT}core.default'
-
-CELERY_DEFAULT_QUEUE = DEFAULT_PRIORITY_QUEUE
-CELERY_DEFAULT_ROUTING_KEY = DEFAULT_PRIORITY_QUEUE
-
-CELERY_QUEUES = {
-    HIGH_PRIORITY_QUEUE: {},
-    DEFAULT_PRIORITY_QUEUE: {}
-}
-
 # Queues configuration
+
+HIGH_PRIORITY_QUEUE = 'edx.core.high'
+DEFAULT_PRIORITY_QUEUE = 'edx.core.default'
 
 CELERY_QUEUE_HA_POLICY = 'all'
 
 CELERY_CREATE_MISSING_QUEUES = True
+
+CELERY_DEFAULT_QUEUE = DEFAULT_PRIORITY_QUEUE
+CELERY_DEFAULT_ROUTING_KEY = DEFAULT_PRIORITY_QUEUE
+
+CELERY_QUEUES = [
+    'edx.cms.core.default',
+    'edx.cms.core.high',
+]
 
 CELERY_BROKER_TRANSPORT = 'amqp'
 CELERY_BROKER_HOSTNAME = 'localhost'
@@ -1786,7 +1758,7 @@ DATA_UPLOAD_MAX_NUMBER_FIELDS = None
 UPLOAD_CHUNK_SIZE_IN_MB = 10
 
 ### Max size of asset uploads to GridFS
-MAX_ASSET_UPLOAD_FILE_SIZE_IN_MB = 20
+MAX_ASSET_UPLOAD_FILE_SIZE_IN_MB = 10
 
 # FAQ url to direct users to if they upload
 # a file that exceeds the above size
@@ -2396,7 +2368,6 @@ DISABLE_DEPRECATED_SIGNUP_URL = False
 LOGISTRATION_RATELIMIT_RATE = '100/5m'
 LOGISTRATION_PER_EMAIL_RATELIMIT_RATE = '30/5m'
 LOGISTRATION_API_RATELIMIT = '20/m'
-LOGIN_AND_REGISTER_FORM_RATELIMIT = '100/5m'
 RESET_PASSWORD_TOKEN_VALIDATE_API_RATELIMIT = '30/7d'
 RESET_PASSWORD_API_RATELIMIT = '30/7d'
 
@@ -2444,22 +2415,3 @@ LOGO_URL_PNG = None
 LOGO_TRADEMARK_URL = None
 FAVICON_URL = None
 DEFAULT_EMAIL_LOGO_URL = 'https://edx-cdn.org/v3/default/logo.png'
-
-############## Settings for course import olx validation ############################
-COURSE_OLX_VALIDATION_STAGE = 1
-COURSE_OLX_VALIDATION_IGNORE_LIST = None
-
-################# show account activate cta after register ########################
-SHOW_ACTIVATE_CTA_POPUP_COOKIE_NAME = 'show-account-activation-popup'
-SHOW_ACCOUNT_ACTIVATION_CTA = False
-
-################# Documentation links for course apps #################
-
-# pylint: disable=line-too-long
-CALCULATOR_HELP_URL = "https://edx.readthedocs.io/projects/open-edx-building-and-running-a-course/en/latest/exercises_tools/calculator.html"
-DISCUSSIONS_HELP_URL = "https://edx.readthedocs.io/projects/open-edx-building-and-running-a-course/en/latest/course_components/create_discussion.html"
-EDXNOTES_HELP_URL = "https://edx.readthedocs.io/projects/open-edx-building-and-running-a-course/en/latest/exercises_tools/notes.html"
-PROGRESS_HELP_URL = "https://edx.readthedocs.io/projects/open-edx-building-and-running-a-course/en/latest/course_assets/pages.html?highlight=progress#hiding-or-showing-the-wiki-or-progress-pages"
-TEAMS_HELP_URL = "https://edx.readthedocs.io/projects/open-edx-building-and-running-a-course/en/latest/course_features/teams/teams_setup.html"
-TEXTBOOKS_HELP_URL = "https://edx.readthedocs.io/projects/open-edx-building-and-running-a-course/en/latest/course_assets/textbooks.html"
-WIKI_HELP_URL = "https://edx.readthedocs.io/projects/open-edx-building-and-running-a-course/en/latest/course_assets/course_wiki.html"

@@ -1,6 +1,4 @@
-"""
-API tests for the openedx certificates app
-"""
+
 from contextlib import contextmanager
 from datetime import datetime
 
@@ -11,11 +9,10 @@ from edx_toggles.toggles import LegacyWaffleSwitch
 from edx_toggles.toggles.testutils import override_waffle_switch
 
 from common.djangoapps.course_modes.models import CourseMode
-from common.djangoapps.student.tests.factories import CourseEnrollmentFactory, UserFactory
 from openedx.core.djangoapps.certificates import api
 from openedx.core.djangoapps.certificates.config import waffle as certs_waffle
 from openedx.core.djangoapps.content.course_overviews.tests.factories import CourseOverviewFactory
-from xmodule.data import CertificatesDisplayBehaviors
+from common.djangoapps.student.tests.factories import CourseEnrollmentFactory, UserFactory
 
 
 # TODO: Copied from lms.djangoapps.certificates.models,
@@ -67,20 +64,14 @@ class MockGeneratedCertificate:
 
 @contextmanager
 def configure_waffle_namespace(feature_enabled):
-    """
-    Context manager to configure the certs flags
-    """
     namespace = certs_waffle.waffle()
-    auto_certificate_generation_switch = LegacyWaffleSwitch(namespace, certs_waffle.AUTO_CERTIFICATE_GENERATION)  # pylint: disable=toggle-missing-annotation
+    auto_certificate_generation_switch = LegacyWaffleSwitch(namespace, certs_waffle.AUTO_CERTIFICATE_GENERATION)
     with override_waffle_switch(auto_certificate_generation_switch, active=feature_enabled):
         yield
 
 
 @ddt.ddt
 class CertificatesApiTestCase(TestCase):
-    """
-    API tests
-    """
     def setUp(self):
         super().setUp()
         self.course = CourseOverviewFactory.create(
@@ -168,7 +159,6 @@ class CertificatesApiTestCase(TestCase):
 
             # With an available date set in the past, both return the available date (if configured)
             self.course.certificate_available_date = datetime(2017, 2, 1, tzinfo=pytz.UTC)
-            self.course.certificates_display_behavior = CertificatesDisplayBehaviors.END_WITH_DATE
             maybe_avail = self.course.certificate_available_date if uses_avail_date else self.certificate.modified_date
             assert maybe_avail == api.available_date_for_certificate(self.course, self.certificate)
             assert maybe_avail == api.display_date_for_certificate(self.course, self.certificate)

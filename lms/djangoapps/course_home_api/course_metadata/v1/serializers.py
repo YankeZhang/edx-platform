@@ -9,8 +9,6 @@ from django.urls import reverse
 from django.utils.translation import ugettext as _
 from rest_framework import serializers
 
-from lms.djangoapps.course_home_api.mixins import VerifiedModeSerializerMixin
-
 
 class CourseTabSerializer(serializers.Serializer):
     """
@@ -29,21 +27,19 @@ class CourseTabSerializer(serializers.Serializer):
         return request.build_absolute_uri(tab.link_func(self.context.get('course'), reverse))
 
 
-class CourseHomeMetadataSerializer(VerifiedModeSerializerMixin, serializers.Serializer):
+class CourseHomeMetadataSerializer(serializers.Serializer):
     """
     Serializer for the Course Home Course Metadata
     """
-    can_load_courseware = serializers.BooleanField()
-    celebrations = serializers.DictField()
-    course_access = serializers.DictField()
     course_id = serializers.CharField()
+    username = serializers.CharField()
     is_enrolled = serializers.BooleanField()
     is_self_paced = serializers.BooleanField()
     is_staff = serializers.BooleanField()
     number = serializers.CharField()
     org = serializers.CharField()
     original_user_is_staff = serializers.BooleanField()
-    start = serializers.DateTimeField()  # used for certain access denied errors
     tabs = CourseTabSerializer(many=True)
     title = serializers.CharField()
-    username = serializers.CharField()
+    can_load_courseware = serializers.BooleanField()
+    celebrations = serializers.DictField()

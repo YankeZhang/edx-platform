@@ -3,9 +3,8 @@ Tests for course verification sock
 """
 
 
-from unittest import mock
-
 import ddt
+import mock
 from edx_toggles.toggles.testutils import override_waffle_flag
 
 from common.djangoapps.course_modes.models import CourseMode
@@ -30,7 +29,7 @@ class TestCourseSockView(SharedModuleStoreTestCase):
     """
     @classmethod
     def setUpClass(cls):
-        super().setUpClass()
+        super(TestCourseSockView, cls).setUpClass()
 
         # Create four courses
         cls.standard_course = CourseFactory.create()
@@ -44,7 +43,7 @@ class TestCourseSockView(SharedModuleStoreTestCase):
         add_course_mode(cls.verified_course_already_enrolled, upgrade_deadline_expired=False)
 
     def setUp(self):
-        super().setUp()
+        super(TestCourseSockView, self).setUp()  # lint-amnesty, pylint: disable=super-with-arguments
         self.user = UserFactory.create()
 
         # Enroll the user in the four courses

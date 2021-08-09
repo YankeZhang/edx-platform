@@ -10,7 +10,7 @@ from django.utils.translation import ugettext_noop
 
 from lms.djangoapps.courseware.access import has_access
 from lms.djangoapps.courseware.entrance_exams import user_can_skip_entrance_exam
-from lms.djangoapps.course_home_api.toggles import course_home_legacy_is_active, course_home_mfe_progress_tab_is_active
+from lms.djangoapps.course_home_api.toggles import course_home_mfe_dates_tab_is_active, course_home_mfe_outline_tab_is_active, course_home_mfe_progress_tab_is_active  # lint-amnesty, pylint: disable=line-too-long
 from openedx.core.lib.course_tabs import CourseTabPluginManager
 from openedx.features.course_experience import DISABLE_UNIFIED_COURSE_TAB_FLAG, default_course_url_name
 from openedx.features.course_experience.url_helpers import get_learning_mfe_home_url
@@ -42,12 +42,12 @@ class CoursewareTab(EnrolledTab):
 
     def __init__(self, tab_dict):
         def link_func(course, reverse_func):
-            if course_home_legacy_is_active(course.id):
+            if course_home_mfe_outline_tab_is_active(course.id):
+                return get_learning_mfe_home_url(course_key=course.id, view_name='home')
+            else:
                 reverse_name_func = lambda course: default_course_url_name(course.id)
                 url_func = course_reverse_func_from_name_func(reverse_name_func)
                 return url_func(course, reverse_func)
-            else:
-                return get_learning_mfe_home_url(course_key=course.id, view_name='home')
 
         tab_dict['link_func'] = link_func
         super().__init__(tab_dict)
@@ -117,7 +117,7 @@ class ProgressTab(EnrolledTab):
                 return reverse_func(self.view_name, args=[str(course.id)])
 
         tab_dict['link_func'] = link_func
-        super().__init__(tab_dict)  # pylint: disable=super-with-arguments
+        super(ProgressTab, self).__init__(tab_dict)  # pylint: disable=super-with-arguments
 
     @classmethod
     def is_enabled(cls, course, user=None):
@@ -210,7 +210,7 @@ class HtmlTextbookTabs(TextbookTabsBase):
             )
 
 
-class LinkTab(CourseTab):  # lint-amnesty, pylint: disable=eq-without-hash
+class LinkTab(CourseTab):
     """
     Abstract class for tabs that contain external links.
     """
@@ -334,10 +334,10 @@ class DatesTab(EnrolledTab):
 
     def __init__(self, tab_dict):
         def link_func(course, reverse_func):
-            if course_home_legacy_is_active(course.id):
-                return reverse_func(self.view_name, args=[str(course.id)])
-            else:
+            if course_home_mfe_dates_tab_is_active(course.id):
                 return get_learning_mfe_home_url(course_key=course.id, view_name=self.view_name)
+            else:
+                return reverse_func(self.view_name, args=[str(course.id)])
 
         tab_dict['link_func'] = link_func
         super().__init__(tab_dict)

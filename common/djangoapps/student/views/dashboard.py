@@ -44,7 +44,7 @@ from openedx.core.djangoapps.util.maintenance_banner import add_maintenance_bann
 from openedx.core.djangolib.markup import HTML, Text
 from openedx.features.enterprise_support.api import (
     get_dashboard_consent_notification,
-    get_enterprise_learner_portal_context,
+    get_enterprise_learner_portal_enabled_message
 )
 from common.djangoapps.student.api import COURSE_DASHBOARD_PLUGIN_VIEW_NAME
 from common.djangoapps.student.helpers import cert_info, check_verify_status_by_course, get_resume_urls_for_enrollments
@@ -576,6 +576,9 @@ def student_dashboard(request):  # lint-amnesty, pylint: disable=too-many-statem
 
     enterprise_message = get_dashboard_consent_notification(request, user, course_enrollments)
 
+    # Display a message guiding the user to their Enterprise's Learner Portal if enabled
+    enterprise_learner_portal_enabled_message = get_enterprise_learner_portal_enabled_message(request)
+
     recovery_email_message = recovery_email_activation_message = None
     if is_secondary_email_feature_enabled():
         try:
@@ -602,9 +605,11 @@ def student_dashboard(request):  # lint-amnesty, pylint: disable=too-many-statem
                 )
             )
 
-    # Disable lookup of Enterprise consent_required_course due to ENT-727
+
+# Disable lookup of Enterprise consent_required_course due to ENT-727
     # Will re-enable after fixing WL-1315
     consent_required_courses = set()
+    enterprise_customer_name = None
 
     # Account activation message
     account_activation_messages = [
@@ -632,7 +637,7 @@ def student_dashboard(request):  # lint-amnesty, pylint: disable=too-many-statem
     inverted_programs = meter.invert_programs()
 
     urls, programs_data = {}, {}
-    bundles_on_dashboard_flag = LegacyWaffleFlag(experiments_namespace, 'bundles_on_dashboard', __name__)  # lint-amnesty, pylint: disable=toggle-missing-annotation
+    bundles_on_dashboard_flag = LegacyWaffleFlag(experiments_namespace, 'bundles_on_dashboard', __name__)
 
     # TODO: Delete this code and the relevant HTML code after testing LEARNER-3072 is complete
     if bundles_on_dashboard_flag.is_enabled() and inverted_programs and list(inverted_programs.items()):
@@ -676,7 +681,7 @@ def student_dashboard(request):  # lint-amnesty, pylint: disable=too-many-statem
     # there is no verification messaging to display.
     verify_status_by_course = check_verify_status_by_course(user, course_enrollments)
     cert_statuses = {
-        enrollment.course_id: cert_info(request.user, enrollment)
+        enrollment.course_id: cert_info(request.user, enrollment.course_overview)
         for enrollment in course_enrollments
     }
 
@@ -699,12 +704,6 @@ def student_dashboard(request):  # lint-amnesty, pylint: disable=too-many-statem
     enrolled_courses_either_paid = frozenset(
         enrollment.course_id for enrollment in course_enrollments
         if enrollment.is_paid_course()
-    )
-
-    # Checks if a course enrollment redeemed using a voucher is refundable
-    enrolled_courses_voucher_refundable = frozenset(
-        enrollment.course_id for enrollment in course_enrollments
-        if enrollment.is_order_voucher_refundable()
     )
 
     # If there are *any* denied reverifications that have not been toggled off,
@@ -742,13 +741,12 @@ def student_dashboard(request):  # lint-amnesty, pylint: disable=too-many-statem
             enr for enr in course_enrollments if entitlement.enrollment_course_run.course_id != enr.course_id
         ]
 
-    show_account_activation_popup = request.COOKIES.get(settings.SHOW_ACTIVATE_CTA_POPUP_COOKIE_NAME, None)
-
     context = {
         'urls': urls,
         'programs_data': programs_data,
         'enterprise_message': enterprise_message,
         'consent_required_courses': consent_required_courses,
+        'enterprise_customer_name': enterprise_customer_name,
         'enrollment_message': enrollment_message,
         'redirect_message': Text(redirect_message),
         'account_activation_messages': account_activation_messages,
@@ -773,12 +771,10 @@ def student_dashboard(request):  # lint-amnesty, pylint: disable=too-many-statem
         'verification_errors': verification_errors,
         'denied_banner': denied_banner,
         'billing_email': settings.PAYMENT_SUPPORT_EMAIL,
-        'show_account_activation_popup': show_account_activation_popup,
         'user': user,
         'logout_url': reverse('logout'),
         'platform_name': platform_name,
         'enrolled_courses_either_paid': enrolled_courses_either_paid,
-        'enrolled_courses_voucher_refundable': enrolled_courses_voucher_refundable,
         'provider_states': [],
         'courses_requirements_not_met': courses_requirements_not_met,
         'nav_hidden': True,
@@ -793,15 +789,12 @@ def student_dashboard(request):  # lint-amnesty, pylint: disable=too-many-statem
         'empty_dashboard_message': empty_dashboard_message,
         'recovery_email_message': recovery_email_message,
         'recovery_email_activation_message': recovery_email_activation_message,
+        'enterprise_learner_portal_enabled_message': enterprise_learner_portal_enabled_message,
         'show_load_all_courses_link': show_load_all_courses_link(user, course_limit, course_enrollments),
         # TODO START: clean up as part of REVEM-199 (START)
         'course_info': get_dashboard_course_info(user, course_enrollments),
         # TODO START: clean up as part of REVEM-199 (END)
     }
-
-    # Include enterprise learner portal metadata and messaging
-    enterprise_learner_portal_context = get_enterprise_learner_portal_context(request)
-    context.update(enterprise_learner_portal_context)
 
     context_from_plugins = get_plugins_view_context(
         ProjectType.LMS,
@@ -833,12 +826,4 @@ def student_dashboard(request):  # lint-amnesty, pylint: disable=too-many-statem
         'resume_button_urls': resume_button_urls
     })
 
-    response = render_to_response('dashboard.html', context)
-    if show_account_activation_popup:
-        response.delete_cookie(
-            settings.SHOW_ACTIVATE_CTA_POPUP_COOKIE_NAME,
-            domain=settings.SESSION_COOKIE_DOMAIN,
-            path='/',
-        )
-
-    return response
+    return render_to_response('dashboard.html', context)

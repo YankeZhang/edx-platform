@@ -20,7 +20,7 @@ from functools import wraps
 from unittest.mock import Mock
 
 from django.test import TestCase
-
+from django.utils.encoding import python_2_unicode_compatible
 from opaque_keys.edx.keys import CourseKey
 from path import Path as path
 from xblock.core import XBlock
@@ -132,7 +132,7 @@ def get_test_system(
         replace_urls=str,
         user=user,
         get_real_user=lambda __: user,
-        filestore=Mock(name='get_test_system.filestore', root_path='.'),
+        filestore=Mock(name='get_test_system.filestore'),
         debug=True,
         hostname="edx.org",
         xqueue={
@@ -204,6 +204,7 @@ def map_references(value, field, actual_course_key):
     return value
 
 
+@python_2_unicode_compatible
 class LazyFormat:
     """
     An stringy object that delays formatting until it's put into a string context.

@@ -11,7 +11,7 @@ from django.core.exceptions import ValidationError
 from django.db import models, transaction
 from django.db.models.signals import pre_delete
 from django.dispatch import receiver
-
+from django.utils.encoding import python_2_unicode_compatible
 from opaque_keys.edx.django.models import CourseKeyField
 
 from openedx.core.djangolib.model_mixins import DeletableByUserValue
@@ -19,6 +19,7 @@ from openedx.core.djangolib.model_mixins import DeletableByUserValue
 log = logging.getLogger(__name__)
 
 
+@python_2_unicode_compatible
 class CourseUserGroup(models.Model):
     """
     This model represents groups of users in a course.  Groups may have different types,
@@ -188,21 +189,21 @@ class CourseCohortsSettings(models.Model):
     # in reality the default value at the time that cohorting is enabled for a course comes from
     # course_module.always_cohort_inline_discussions (via `migrate_cohort_settings`).
     # DEPRECATED-- DO NOT USE: Instead use `CourseDiscussionSettings.always_divide_inline_discussions`
-    # via `CourseDiscussionSettings.get` or `CourseDiscussionSettings.update`.
+    # via `get_course_discussion_settings` or `set_course_discussion_settings`.
     always_cohort_inline_discussions = models.BooleanField(default=False)
 
     @property
     def cohorted_discussions(self):
         """
         DEPRECATED-- DO NOT USE. Instead use `CourseDiscussionSettings.divided_discussions`
-        via `CourseDiscussionSettings.get`.
+        via `get_course_discussion_settings`.
         """
         return json.loads(self._cohorted_discussions)
 
     @cohorted_discussions.setter
     def cohorted_discussions(self, value):
         """
-        DEPRECATED-- DO NOT USE. Instead use `CourseDiscussionSettings.update`
+        DEPRECATED-- DO NOT USE. Instead use `CourseDiscussionSettings` via `set_course_discussion_settings`.
         """
         self._cohorted_discussions = json.dumps(value)
 

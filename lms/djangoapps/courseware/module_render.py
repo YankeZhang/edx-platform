@@ -1068,32 +1068,31 @@ def handle_xblock_callback(request, course_id, usage_id, handler, suffix=None):
         return _invoke_xblock_handler(request, course_id, usage_id, handler, suffix, course=course)
 
 
-def _get_usage_key_for_course(course_key, usage_id) -> UsageKey:
+def get_module_by_usage_id(request, course_id, usage_id, disable_staff_debug_info=False, course=None,
+                           will_recheck_access=False):
     """
-    Returns UsageKey mapped into the course for a given usage_id string
-    """
-    try:
-        return UsageKey.from_string(unquote_slashes(usage_id)).map_into_course(course_key)
-    except InvalidKeyError as exc:
-        raise Http404("Invalid location") from exc
-
-
-def _get_descriptor_by_usage_key(usage_key):
-    """
-    Gets a descriptor instance based on a mapped-to-course usage_key
+    Gets a module instance based on its `usage_id` in a course, for a given request/user
 
     Returns (instance, tracking_context)
     """
+    user = request.user
+
+    try:
+        course_id = CourseKey.from_string(course_id)
+        usage_key = UsageKey.from_string(unquote_slashes(usage_id)).map_into_course(course_id)
+    except InvalidKeyError:
+        raise Http404("Invalid location")  # lint-amnesty, pylint: disable=raise-missing-from
+
     try:
         descriptor = modulestore().get_item(usage_key)
         descriptor_orig_usage_key, descriptor_orig_version = modulestore().get_block_original_usage(usage_key)
-    except ItemNotFoundError as exc:
+    except ItemNotFoundError:
         log.warning(
             "Invalid location for course id %s: %s",
             usage_key.course_key,
             usage_key
         )
-        raise Http404 from exc
+        raise Http404  # lint-amnesty, pylint: disable=raise-missing-from
 
     tracking_context = {
         'module': {
@@ -1108,23 +1107,9 @@ def _get_descriptor_by_usage_key(usage_key):
         tracking_context['module']['original_usage_key'] = str(descriptor_orig_usage_key)
         tracking_context['module']['original_usage_version'] = str(descriptor_orig_version)
 
-    return descriptor, tracking_context
-
-
-def get_module_by_usage_id(request, course_id, usage_id, disable_staff_debug_info=False, course=None,
-                           will_recheck_access=False):
-    """
-    Gets a module instance based on its `usage_id` in a course, for a given request/user
-
-    Returns (instance, tracking_context)
-    """
-    course_key = CourseKey.from_string(course_id)
-    usage_key = _get_usage_key_for_course(course_key, usage_id)
-    descriptor, tracking_context = _get_descriptor_by_usage_key(usage_key)
-
-    _, user = setup_masquerade(request, course_key, has_access(request.user, 'staff', descriptor, course_key))
+    unused_masquerade, user = setup_masquerade(request, course_id, has_access(user, 'staff', descriptor, course_id))
     field_data_cache = FieldDataCache.cache_for_descriptor_descendents(
-        course_key,
+        course_id,
         user,
         descriptor,
         read_only=CrawlersConfig.is_crawler(request),
@@ -1145,7 +1130,7 @@ def get_module_by_usage_id(request, course_id, usage_id, disable_staff_debug_inf
         log.debug("No module %s for user %s -- access denied?", usage_key, user)
         raise Http404
 
-    return instance, tracking_context
+    return (instance, tracking_context)
 
 
 def _invoke_xblock_handler(request, course_id, usage_id, handler, suffix, course=None):
@@ -1169,31 +1154,23 @@ def _invoke_xblock_handler(request, course_id, usage_id, handler, suffix, course
     # Make a CourseKey from the course_id, raising a 404 upon parse error.
     try:
         course_key = CourseKey.from_string(course_id)
-    except InvalidKeyError as exc:
-        raise Http404 from exc
+    except InvalidKeyError:
+        raise Http404  # lint-amnesty, pylint: disable=raise-missing-from
 
     set_custom_attributes_for_course_key(course_key)
 
     with modulestore().bulk_operations(course_key):
-        usage_key = _get_usage_key_for_course(course_key, usage_id)
+        try:
+            usage_key = UsageKey.from_string(unquote_slashes(usage_id))
+        except InvalidKeyError:
+            raise Http404  # lint-amnesty, pylint: disable=raise-missing-from
         if is_xblock_aside(usage_key):
             # Get the usage key for the block being wrapped by the aside (not the aside itself)
             block_usage_key = usage_key.usage_key
         else:
             block_usage_key = usage_key
-
-        # Peek at the handler method to see if it actually wants to check access itself. (The handler may not want
-        # inaccessible blocks stripped from the tree.) This ends up doing two modulestore lookups for the descriptor,
-        # but the blocks should be available in the request cache the second time.
-        # At the time of writing, this is only used by one handler. If this usage grows, we may want to re-evaluate
-        # how we do this to something more elegant. If you are the author of a third party block that decides it wants
-        # to set this too, please let us know so we can consider making this easier / better-documented.
-        descriptor, _ = _get_descriptor_by_usage_key(block_usage_key)
-        handler_method = getattr(descriptor, handler, False)
-        will_recheck_access = handler_method and getattr(handler_method, 'will_recheck_access', False)
-
         instance, tracking_context = get_module_by_usage_id(
-            request, course_id, str(block_usage_key), course=course, will_recheck_access=will_recheck_access,
+            request, course_id, str(block_usage_key), course=course
         )
 
         # Name the transaction so that we can view XBlock handlers separately in

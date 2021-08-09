@@ -188,15 +188,7 @@ class CompletionServiceTestCase(CompletionWaffleTestMixin, SharedModuleStoreTest
         ItemFactory.create(parent=library, category='problem', publish_item=False, user_id=self.user.id)
         ItemFactory.create(parent=library, category='problem', publish_item=False, user_id=self.user.id)
         ItemFactory.create(parent=library, category='problem', publish_item=False, user_id=self.user.id)
-        # Create a new vertical to hold the library content block
-        # It is very important that we use parent_location=self.sequence.location (and not parent=self.sequence), since
-        # sequence is a class attribute and passing it by value will update its .children=[] which will then leak into
-        # other tests and cause errors if the children no longer exist.
-        lib_vertical = ItemFactory.create(
-            parent_location=self.sequence.location,
-            category='vertical',
-            publish_item=False,
-        )
+        lib_vertical = ItemFactory.create(parent=self.sequence, category='vertical', publish_item=False)
         library_content_block = ItemFactory.create(
             parent=lib_vertical,
             category='library_content',
@@ -242,11 +234,7 @@ class CompletionServiceTestCase(CompletionWaffleTestMixin, SharedModuleStoreTest
         assert self.completion_service.vertical_is_complete(lib_vertical)
 
     def test_vertical_completion_with_nested_children(self):
-        # Create a new vertical.
-        # It is very important that we use parent_location=self.sequence.location (and not parent=self.sequence), since
-        # sequence is a class attribute and passing it by value will update its .children=[] which will then leak into
-        # other tests and cause errors if the children no longer exist.
-        parent_vertical = ItemFactory(parent_location=self.sequence.location, category='vertical')
+        parent_vertical = ItemFactory(parent=self.sequence, category='vertical')
         extra_vertical = ItemFactory(parent=parent_vertical, category='vertical')
         problem = ItemFactory(parent=extra_vertical, category='problem')
         parent_vertical = self.store.get_item(parent_vertical.location)

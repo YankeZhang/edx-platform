@@ -6,12 +6,13 @@ DiscountRestrictionConfig Models
 
 
 from django.db import models
-
+from django.utils.encoding import python_2_unicode_compatible
 from django.utils.translation import ugettext_lazy as _
 
 from openedx.core.djangoapps.config_model_utils.models import StackedConfigurationModel
 
 
+@python_2_unicode_compatible
 class DiscountRestrictionConfig(StackedConfigurationModel):
     """
     A ConfigurationModel used to manage restrictons for lms-controlled discounts
@@ -40,6 +41,7 @@ class DiscountRestrictionConfig(StackedConfigurationModel):
         )
 
 
+@python_2_unicode_compatible
 class DiscountPercentageConfig(StackedConfigurationModel):
     """
     A ConfigurationModel to configure the discount percentage for the first purchase discount

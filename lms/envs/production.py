@@ -21,6 +21,7 @@ import copy
 import datetime
 import os
 
+import dateutil
 import yaml
 from corsheaders.defaults import default_headers as corsheaders_default_headers
 from django.core.exceptions import ImproperlyConfigured
@@ -102,6 +103,15 @@ except Exception:  # pylint: disable=broad-except
 # Do NOT calculate this dynamically at startup with git because it's *slow*.
 EDX_PLATFORM_REVISION = REVISION_CONFIG.get('EDX_PLATFORM_REVISION', EDX_PLATFORM_REVISION)
 
+# SERVICE_VARIANT specifies name of the variant used, which decides what JSON
+# configuration files are read during startup.
+SERVICE_VARIANT = os.environ.get('SERVICE_VARIANT', None)
+
+# CONFIG_PREFIX specifies the prefix of the JSON configuration files,
+# based on the service variant. If no variant is use, don't use a
+# prefix.
+CONFIG_PREFIX = SERVICE_VARIANT + "." if SERVICE_VARIANT else ""
+
 ###################################### CELERY  ################################
 
 # Don't use a connection pool, since connections are dropped by ELB.
@@ -118,6 +128,28 @@ BROKER_HEARTBEAT_CHECKRATE = ENV_TOKENS.get('BROKER_HEARTBEAT_CHECKRATE', 2)
 
 # Each worker should only fetch one message at a time
 CELERYD_PREFETCH_MULTIPLIER = 1
+
+# Rename the exchange and queues for each variant
+
+QUEUE_VARIANT = CONFIG_PREFIX.lower()
+
+CELERY_DEFAULT_EXCHANGE = f'edx.{QUEUE_VARIANT}core'
+
+HIGH_PRIORITY_QUEUE = f'edx.{QUEUE_VARIANT}core.high'
+DEFAULT_PRIORITY_QUEUE = f'edx.{QUEUE_VARIANT}core.default'
+HIGH_MEM_QUEUE = f'edx.{QUEUE_VARIANT}core.high_mem'
+
+CELERY_DEFAULT_QUEUE = DEFAULT_PRIORITY_QUEUE
+CELERY_DEFAULT_ROUTING_KEY = DEFAULT_PRIORITY_QUEUE
+
+CELERY_QUEUES = {
+    HIGH_PRIORITY_QUEUE: {},
+    DEFAULT_PRIORITY_QUEUE: {},
+    HIGH_MEM_QUEUE: {},
+}
+
+CELERY_ROUTES = "openedx.core.lib.celery.routers.route_task"
+CELERYBEAT_SCHEDULE = {}  # For scheduling tasks, entries can be added to this dict
 
 # STATIC_ROOT specifies the directory where static files are
 # collected
@@ -182,23 +214,12 @@ ALLOWED_HOSTS = [
     FEATURES['PREVIEW_LMS_BASE'],
 ]
 
-# Sometimes, OAuth2 clients want the user to redirect back to their site after logout. But to determine if the given
-# redirect URL/path is safe for redirection, the following variable is used by edX.
-LOGIN_REDIRECT_WHITELIST = ENV_TOKENS.get(
-    'LOGIN_REDIRECT_WHITELIST',
-    LOGIN_REDIRECT_WHITELIST
-)
-
 # allow for environments to specify what cookie name our login subsystem should use
 # this is to fix a bug regarding simultaneous logins between edx.org and edge.edx.org which can
 # happen with some browsers (e.g. Firefox)
 if ENV_TOKENS.get('SESSION_COOKIE_NAME', None):
     # NOTE, there's a bug in Django (http://bugs.python.org/issue18012) which necessitates this being a str()
     SESSION_COOKIE_NAME = str(ENV_TOKENS.get('SESSION_COOKIE_NAME'))
-
-# This is the domain that is used to set shared cookies between various sub-domains.
-# By default, it's set to the same thing as the SESSION_COOKIE_DOMAIN, but we want to make it overrideable.
-SHARED_COOKIE_DOMAIN = ENV_TOKENS.get('SHARED_COOKIE_DOMAIN', SESSION_COOKIE_DOMAIN)
 
 CACHES = ENV_TOKENS['CACHES']
 # Cache used for location mapping -- called many times with the same key/value
@@ -580,9 +601,6 @@ MAX_FAILED_LOGIN_ATTEMPTS_LOCKOUT_PERIOD_SECS = ENV_TOKENS.get(
 ##### LOGISTRATION RATE LIMIT SETTINGS #####
 LOGISTRATION_RATELIMIT_RATE = ENV_TOKENS.get('LOGISTRATION_RATELIMIT_RATE', LOGISTRATION_RATELIMIT_RATE)
 LOGISTRATION_API_RATELIMIT = ENV_TOKENS.get('LOGISTRATION_API_RATELIMIT', LOGISTRATION_API_RATELIMIT)
-LOGIN_AND_REGISTER_FORM_RATELIMIT = ENV_TOKENS.get(
-    'LOGIN_AND_REGISTER_FORM_RATELIMIT', LOGIN_AND_REGISTER_FORM_RATELIMIT
-)
 RESET_PASSWORD_TOKEN_VALIDATE_API_RATELIMIT = ENV_TOKENS.get(
     'RESET_PASSWORD_TOKEN_VALIDATE_API_RATELIMIT', RESET_PASSWORD_TOKEN_VALIDATE_API_RATELIMIT
 )
@@ -604,9 +622,6 @@ SESSION_INACTIVITY_TIMEOUT_IN_SECONDS = AUTH_TOKENS.get("SESSION_INACTIVITY_TIME
 ##### LMS DEADLINE DISPLAY TIME_ZONE #######
 TIME_ZONE_DISPLAYED_FOR_DEADLINES = ENV_TOKENS.get("TIME_ZONE_DISPLAYED_FOR_DEADLINES",
                                                    TIME_ZONE_DISPLAYED_FOR_DEADLINES)
-
-#### PROCTORED EXAM SETTINGS ####
-PROCTORED_EXAM_VIEWABLE_PAST_DUE = ENV_TOKENS.get('PROCTORED_EXAM_VIEWABLE_PAST_DUE', False)
 
 ##### Third-party auth options ################################################
 ENABLE_REQUIRE_THIRD_PARTY_AUTH = ENV_TOKENS.get('ENABLE_REQUIRE_THIRD_PARTY_AUTH', False)
@@ -704,9 +719,6 @@ DEFAULT_MOBILE_AVAILABLE = ENV_TOKENS.get(
 # Enrollment API Cache Timeout
 ENROLLMENT_COURSE_DETAILS_CACHE_TIMEOUT = ENV_TOKENS.get('ENROLLMENT_COURSE_DETAILS_CACHE_TIMEOUT', 60)
 
-# Ecommerce Orders API Cache Timeout
-ECOMMERCE_ORDERS_API_CACHE_TIMEOUT = ENV_TOKENS.get('ECOMMERCE_ORDERS_API_CACHE_TIMEOUT', 3600)
-
 if FEATURES.get('ENABLE_COURSEWARE_SEARCH') or \
    FEATURES.get('ENABLE_DASHBOARD_SEARCH') or \
    FEATURES.get('ENABLE_COURSE_DISCOVERY') or \
@@ -787,6 +799,10 @@ JWT_AUTH.update(AUTH_TOKENS.get('JWT_AUTH', {}))
 STUDENTMODULEHISTORYEXTENDED_OFFSET = ENV_TOKENS.get(
     'STUDENTMODULEHISTORYEXTENDED_OFFSET', STUDENTMODULEHISTORYEXTENDED_OFFSET
 )
+
+# Cutoff date for granting audit certificates
+if ENV_TOKENS.get('AUDIT_CERT_CUTOFF_DATE', None):
+    AUDIT_CERT_CUTOFF_DATE = dateutil.parser.parse(ENV_TOKENS.get('AUDIT_CERT_CUTOFF_DATE'))
 
 ################################ Settings for Credentials Service ################################
 
@@ -988,6 +1004,14 @@ EXPLICIT_QUEUES = {
         'queue': GRADES_DOWNLOAD_ROUTING_KEY},
     'lms.djangoapps.instructor_task.tasks.generate_certificates': {
         'queue': GRADES_DOWNLOAD_ROUTING_KEY},
+    'lms.djangoapps.email_marketing.tasks.get_email_cookies_via_sailthru': {
+        'queue': ACE_ROUTING_KEY},
+    'lms.djangoapps.email_marketing.tasks.update_user': {
+        'queue': ACE_ROUTING_KEY},
+    'lms.djangoapps.email_marketing.tasks.update_user_email': {
+        'queue': ACE_ROUTING_KEY},
+    'lms.djangoapps.email_marketing.tasks.update_course_enrollment': {
+        'queue': ACE_ROUTING_KEY},
     'lms.djangoapps.verify_student.tasks.send_verification_status_email': {
         'queue': ACE_ROUTING_KEY},
     'lms.djangoapps.verify_student.tasks.send_ace_message': {
@@ -1008,13 +1032,13 @@ EXPLICIT_QUEUES = {
         'queue': POLICY_CHANGE_GRADES_ROUTING_KEY},
     'lms.djangoapps.grades.tasks.recalculate_subsection_grade_v3': {
         'queue': RECALCULATE_GRADES_ROUTING_KEY},
-    'openedx.core.djangoapps.programs.tasks.award_program_certificates': {
+    'openedx.core.djangoapps.programs.tasks.v1.tasks.award_program_certificates': {
         'queue': PROGRAM_CERTIFICATES_ROUTING_KEY},
-    'openedx.core.djangoapps.programs.tasks.revoke_program_certificates': {
+    'openedx.core.djangoapps.programs.tasks.v1.tasks.revoke_program_certificates': {
         'queue': PROGRAM_CERTIFICATES_ROUTING_KEY},
-    'openedx.core.djangoapps.programs.tasks.update_certificate_visible_date_on_course_update': {
+    'openedx.core.djangoapps.programs.tasks.v1.tasks.update_certificate_visible_date_on_course_update': {
         'queue': PROGRAM_CERTIFICATES_ROUTING_KEY},
-    'openedx.core.djangoapps.programs.tasks.award_course_certificate': {
+    'openedx.core.djangoapps.programs.tasks.v1.tasks.award_course_certificate': {
         'queue': PROGRAM_CERTIFICATES_ROUTING_KEY},
     'openedx.core.djangoapps.coursegraph.dump_course_to_neo4j': {
         'queue': COURSEGRAPH_JOB_QUEUE},
@@ -1024,19 +1048,3 @@ LOGO_IMAGE_EXTRA_TEXT = ENV_TOKENS.get('LOGO_IMAGE_EXTRA_TEXT', '')
 
 ############## XBlock extra mixins ############################
 XBLOCK_MIXINS += tuple(XBLOCK_EXTRA_MIXINS)
-
-############## Settings for course import olx validation ############################
-COURSE_OLX_VALIDATION_STAGE = ENV_TOKENS.get('COURSE_OLX_VALIDATION_STAGE', COURSE_OLX_VALIDATION_STAGE)
-COURSE_OLX_VALIDATION_IGNORE_LIST = ENV_TOKENS.get(
-    'COURSE_OLX_VALIDATION_IGNORE_LIST',
-    COURSE_OLX_VALIDATION_IGNORE_LIST
-)
-
-################# show account activate cta after register ########################
-SHOW_ACCOUNT_ACTIVATION_CTA = ENV_TOKENS.get('SHOW_ACCOUNT_ACTIVATION_CTA', SHOW_ACCOUNT_ACTIVATION_CTA)
-
-################# Settings for Chrome-specific origin trials ########
-# Token for "Disable Different Origin Subframe Dialog Suppression" Chrome Origin Trial, which must be origin-specific.
-CHROME_DISABLE_SUBFRAME_DIALOG_SUPPRESSION_TOKEN = ENV_TOKENS.get(
-    'CHROME_DISABLE_SUBFRAME_DIALOG_SUPPRESSION_TOKEN', CHROME_DISABLE_SUBFRAME_DIALOG_SUPPRESSION_TOKEN
-)

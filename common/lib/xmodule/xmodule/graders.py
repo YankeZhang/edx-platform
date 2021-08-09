@@ -11,6 +11,7 @@ import sys
 from collections import OrderedDict
 from datetime import datetime
 
+from contracts import contract
 from pytz import UTC
 from django.utils.translation import ugettext_lazy as _
 
@@ -25,6 +26,7 @@ class ScoreBase(metaclass=abc.ABCMeta):  # pylint: disable=eq-without-hash
     Abstract base class for encapsulating fields of values scores.
     """
 
+    @contract(graded="bool", first_attempted="datetime|None")
     def __init__(self, graded, first_attempted):
         """
         Fields common to all scores include:
@@ -54,6 +56,7 @@ class ProblemScore(ScoreBase):
     """
     Encapsulates the fields of a Problem's score.
     """
+    @contract
     def __init__(self, raw_earned, raw_possible, weighted_earned, weighted_possible, weight, *args, **kwargs):
         """
         In addition to the fields in ScoreBase, arguments include:
@@ -85,6 +88,7 @@ class AggregatedScore(ScoreBase):
     """
     Encapsulates the fields of a Subsection's score.
     """
+    @contract
     def __init__(self, tw_earned, tw_possible, *args, **kwargs):
         """
         In addition to the fields in ScoreBase, also includes:

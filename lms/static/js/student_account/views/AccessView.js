@@ -81,6 +81,8 @@
                     this.enterpriseSlugLoginURL = options.enterprise_slug_login_url || '';
                     this.isEnterpriseEnable = options.is_enterprise_enable || false;
                     this.isAccountRecoveryFeatureEnabled = options.is_account_recovery_feature_enabled || false;
+                    this.isMultipleUserEnterprisesFeatureEnabled =
+                        options.is_multiple_user_enterprises_feature_enabled || false;
                     this.is_require_third_party_auth_enabled = options.is_require_third_party_auth_enabled || false;
 
                 // The login view listens for 'sync' events from the reset model
@@ -171,7 +173,7 @@
                         this.listenTo(this.subview.login, 'password-help', this.resetPassword);
 
                     // Listen for 'auth-complete' event so we can enroll/redirect the user appropriately.
-                        if (!isTpaSaml) {
+                        if (this.isMultipleUserEnterprisesFeatureEnabled === true && !isTpaSaml) {
                             this.listenTo(this.subview.login, 'auth-complete', this.loginComplete);
                         } else {
                             this.listenTo(this.subview.login, 'auth-complete', this.authComplete);
@@ -197,8 +199,7 @@
                     register: function(data) {
                         var model = new RegisterModel({}, {
                             method: data.method,
-                            url: data.submit_url,
-                            nextUrl: this.nextUrl
+                            url: data.submit_url
                         });
 
                         this.subview.register = new RegisterView({
@@ -283,7 +284,7 @@
                     this.element.show($form);
 
                 // Update url without reloading page
-                    if (type != 'institution_login' && type != 'reset') {
+                    if (type != 'institution_login') {
                         History.pushState(null, document.title, '/' + type + queryStr);
                     }
                     analytics.page('login_and_registration', type);

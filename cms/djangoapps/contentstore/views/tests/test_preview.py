@@ -169,7 +169,6 @@ class GetPreviewHtmlTestCase(ModuleStoreTestCase):
 @XBlock.needs("field-data")
 @XBlock.needs("i18n")
 @XBlock.needs("user")
-@XBlock.needs("teams_configuration")
 class PureXBlock(XBlock):
     """
     Pure XBlock to use in tests.
@@ -193,7 +192,7 @@ class StudioXBlockServiceBindingTest(ModuleStoreTestCase):
         self.field_data = mock.Mock()
 
     @XBlock.register_temp_plugin(PureXBlock, identifier='pure')
-    @ddt.data("user", "i18n", "field-data", "teams_configuration")
+    @ddt.data("user", "i18n", "field-data")
     def test_expected_services_exist(self, expected_service):
         """
         Tests that the 'user' and 'i18n' services are provided by the Studio runtime.
